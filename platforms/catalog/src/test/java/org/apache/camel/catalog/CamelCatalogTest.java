@@ -456,18 +456,22 @@ public class CamelCatalogTest {
         assertFalse(result.isSuccess());
         assertEquals("ggg", result.getInvalidBoolean().get("showAll"));
         assertEquals(1, result.getNumberOfErrors());
+
+        // dataset
+        result = catalog.validateEndpointProperties("dataset:foo?minRate=50");
+        assertTrue(result.isSuccess());
     }
 
     @Test
     public void validatePropertiesSummary() throws Exception {
         EndpointValidationResult result = catalog.validateEndpointProperties("yammer:MESSAGES?blah=yada&accessToken=aaa&consumerKey=&useJson=no&initialDelay=five&pollStrategy=myStrategy");
         assertFalse(result.isSuccess());
-        String reason = result.summaryErrorMessage();
+        String reason = result.summaryErrorMessage(true);
         LOG.info(reason);
 
         result = catalog.validateEndpointProperties("jms:unknown:myqueue");
         assertFalse(result.isSuccess());
-        reason = result.summaryErrorMessage();
+        reason = result.summaryErrorMessage(false);
         LOG.info(reason);
     }
 
@@ -530,6 +534,66 @@ public class CamelCatalogTest {
         ObjectMapper mapper = new ObjectMapper();
         JsonNode tree = mapper.readTree(json);
         assertNotNull(tree);
+    }
+
+    @Test
+    public void testAddComponent() throws Exception {
+        assertFalse(catalog.findComponentNames().contains("dummy"));
+
+        catalog.addComponent("dummy", "org.foo.camel.DummyComponent");
+
+        assertTrue(catalog.findComponentNames().contains("dummy"));
+
+        String json = catalog.componentJSonSchema("dummy");
+        assertNotNull(json);
+
+        // validate we can parse the json
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode tree = mapper.readTree(json);
+        assertNotNull(tree);
+    }
+
+    @Test
+    public void testAddDataFormat() throws Exception {
+        assertFalse(catalog.findDataFormatNames().contains("dummyformat"));
+
+        catalog.addDataFormat("dummyformat", "org.foo.camel.DummyDataFormat");
+
+        assertTrue(catalog.findDataFormatNames().contains("dummyformat"));
+
+        String json = catalog.dataFormatJSonSchema("dummyformat");
+        assertNotNull(json);
+
+        // validate we can parse the json
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode tree = mapper.readTree(json);
+        assertNotNull(tree);
+    }
+
+    @Test
+    public void testSimpleExpression() throws Exception {
+        SimpleValidationResult result = catalog.validateSimpleExpression("${body}");
+        assertTrue(result.isSuccess());
+        assertEquals("${body}", result.getSimple());
+
+        result = catalog.validateSimpleExpression("${body");
+        assertFalse(result.isSuccess());
+        assertEquals("${body", result.getSimple());
+        LOG.info(result.getError());
+        assertTrue(result.getError().startsWith("expected symbol functionEnd but was eol at location 5"));
+    }
+
+    @Test
+    public void testSimplePredicate() throws Exception {
+        SimpleValidationResult result = catalog.validateSimplePredicate("${body} == 'abc'");
+        assertTrue(result.isSuccess());
+        assertEquals("${body} == 'abc'", result.getSimple());
+
+        result = catalog.validateSimplePredicate("${body} > ${header.size");
+        assertFalse(result.isSuccess());
+        assertEquals("${body} > ${header.size", result.getSimple());
+        LOG.info(result.getError());
+        assertTrue(result.getError().startsWith("expected symbol functionEnd but was eol at location 22"));
     }
 
 }

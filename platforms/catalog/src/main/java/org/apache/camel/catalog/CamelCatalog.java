@@ -41,6 +41,22 @@ public interface CamelCatalog {
     void setSuggestionStrategy(SuggestionStrategy suggestionStrategy);
 
     /**
+     * Adds a 3rd party component to this catalog.
+     *
+     * @param name      the component name
+     * @param className the fully qualified class name for the component class
+     */
+    void addComponent(String name, String className);
+
+    /**
+     * Adds a 3rd party data format to this catalog.
+     *
+     * @param name      the data format name
+     * @param className the fully qualified class name for the data format class
+     */
+    void addDataFormat(String name, String className);
+
+    /**
      * The version of this Camel Catalog
      */
     String getCatalogVersion();
@@ -181,6 +197,26 @@ public interface CamelCatalog {
      * @return validation result
      */
     EndpointValidationResult validateEndpointProperties(String uri);
+
+    /**
+     * Parses and validates the simple expression.
+     * <p/>
+     * <b>Important:</b> This requires having <tt>camel-core</tt> on the classpath
+     *
+     * @param simple  the simple expression
+     * @return validation result
+     */
+    SimpleValidationResult validateSimpleExpression(String simple);
+
+    /**
+     * Parses and validates the simple predicate
+     * <p/>
+     * <b>Important:</b> This requires having <tt>camel-core</tt> on the classpath
+     *
+     * @param simple  the simple predicate
+     * @return validation result
+     */
+    SimpleValidationResult validateSimplePredicate(String simple);
 
     /**
      * Returns the component name from the given endpoint uri

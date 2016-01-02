@@ -19,9 +19,11 @@ package org.apache.camel.catalog;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -44,6 +46,7 @@ import static org.apache.camel.catalog.CatalogHelper.after;
 import static org.apache.camel.catalog.JSonSchemaHelper.getNames;
 import static org.apache.camel.catalog.JSonSchemaHelper.getPropertyDefaultValue;
 import static org.apache.camel.catalog.JSonSchemaHelper.getPropertyEnum;
+import static org.apache.camel.catalog.JSonSchemaHelper.getPropertyKind;
 import static org.apache.camel.catalog.JSonSchemaHelper.getRow;
 import static org.apache.camel.catalog.JSonSchemaHelper.isPropertyBoolean;
 import static org.apache.camel.catalog.JSonSchemaHelper.isPropertyInteger;
@@ -74,6 +77,10 @@ public class DefaultCamelCatalog implements CamelCatalog {
     private static final Pattern SYNTAX_PATTERN = Pattern.compile("(\\w+)");
 
     private final VersionHelper version = new VersionHelper();
+
+    // 3rd party components/data-formats
+    private final Map<String, String> extraComponents = new HashMap<String, String>();
+    private final Map<String, String> extraDataFormats = new HashMap<String, String>();
 
     // cache of operation -> result
     private final Map<String, Object> cache = new HashMap<String, Object>();
@@ -107,6 +114,24 @@ public class DefaultCamelCatalog implements CamelCatalog {
     }
 
     @Override
+    public void addComponent(String name, String className) {
+        extraComponents.put(name, className);
+        // invalidate the cache
+        cache.remove("findComponentNames");
+        cache.remove("findComponentLabels");
+        cache.remove("listComponentsAsJson");
+    }
+
+    @Override
+    public void addDataFormat(String name, String className) {
+        extraDataFormats.put(name, className);
+        // invalidate the cache
+        cache.remove("findDataFormatNames");
+        cache.remove("findDataFormatLabels");
+        cache.remove("listDataFormatsAsJson");
+    }
+
+    @Override
     public String getCatalogVersion() {
         return version.getVersion();
     }
@@ -129,6 +154,14 @@ public class DefaultCamelCatalog implements CamelCatalog {
                     // ignore
                 }
             }
+
+            // include third party components
+            for (Map.Entry<String, String> entry : extraComponents.entrySet()) {
+                names.add(entry.getKey());
+            }
+            // sort the names
+            Collections.sort(names);
+
             if (caching) {
                 cache.put("findComponentNames", names);
             }
@@ -154,6 +187,14 @@ public class DefaultCamelCatalog implements CamelCatalog {
                     // ignore
                 }
             }
+
+            // include third party data formats
+            for (Map.Entry<String, String> entry : extraDataFormats.entrySet()) {
+                names.add(entry.getKey());
+            }
+            // sort the names
+            Collections.sort(names);
+
             if (caching) {
                 cache.put("findDataFormatNames", names);
             }
@@ -341,7 +382,7 @@ public class DefaultCamelCatalog implements CamelCatalog {
 
         String answer = null;
         if (caching) {
-            answer = (String) cache.get(file);
+            answer = (String) cache.get("model-" + file);
         }
 
         if (answer == null) {
@@ -354,7 +395,7 @@ public class DefaultCamelCatalog implements CamelCatalog {
                 }
             }
             if (caching) {
-                cache.put(file, answer);
+                cache.put("model-" + file, answer);
             }
         }
 
@@ -367,7 +408,7 @@ public class DefaultCamelCatalog implements CamelCatalog {
 
         String answer = null;
         if (caching) {
-            answer = (String) cache.get(file);
+            answer = (String) cache.get("component-" + file);
         }
 
         if (answer == null) {
@@ -378,9 +419,25 @@ public class DefaultCamelCatalog implements CamelCatalog {
                 } catch (IOException e) {
                     // ignore
                 }
+            } else {
+                // its maybe a third party so try load it
+                String className = extraComponents.get(name);
+                if (className != null) {
+                    String packageName = className.substring(0, className.lastIndexOf('.'));
+                    packageName = packageName.replace('.', '/');
+                    String path = packageName + "/" + name + ".json";
+                    is = DefaultCamelCatalog.class.getClassLoader().getResourceAsStream(path);
+                    if (is != null) {
+                        try {
+                            answer = CatalogHelper.loadText(is);
+                        } catch (IOException e) {
+                            // ignore
+                        }
+                    }
+                }
             }
             if (caching) {
-                cache.put(file, answer);
+                cache.put("component-" + file, answer);
             }
         }
 
@@ -393,7 +450,7 @@ public class DefaultCamelCatalog implements CamelCatalog {
 
         String answer = null;
         if (caching) {
-            answer = (String) cache.get(file);
+            answer = (String) cache.get("dataformat-" + file);
         }
 
         if (answer == null) {
@@ -404,9 +461,25 @@ public class DefaultCamelCatalog implements CamelCatalog {
                 } catch (IOException e) {
                     // ignore
                 }
+            } else {
+                // its maybe a third party so try load it
+                String className = extraDataFormats.get(name);
+                if (className != null) {
+                    String packageName = className.substring(0, className.lastIndexOf('.'));
+                    packageName = packageName.replace('.', '/');
+                    String path = packageName + "/" + name + ".json";
+                    is = DefaultCamelCatalog.class.getClassLoader().getResourceAsStream(path);
+                    if (is != null) {
+                        try {
+                            answer = CatalogHelper.loadText(is);
+                        } catch (IOException e) {
+                            // ignore
+                        }
+                    }
+                }
             }
             if (caching) {
-                cache.put(file, answer);
+                cache.put("dataformat-" + file, answer);
             }
         }
 
@@ -419,7 +492,7 @@ public class DefaultCamelCatalog implements CamelCatalog {
 
         String answer = null;
         if (caching) {
-            answer = (String) cache.get(file);
+            answer = (String) cache.get("language-" + file);
         }
 
         if (answer == null) {
@@ -432,7 +505,7 @@ public class DefaultCamelCatalog implements CamelCatalog {
                 }
             }
             if (caching) {
-                cache.put(file, answer);
+                cache.put("language-" + file, answer);
             }
         }
 
@@ -723,8 +796,9 @@ public class DefaultCamelCatalog implements CamelCatalog {
                     }
                 }
 
-                // is reference lookup of bean
-                if (isPropertyObject(rows, name)) {
+                // is reference lookup of bean (not applicable for @UriPath)
+                String kind = getPropertyKind(rows, name);
+                if (!"path".equals(kind) && isPropertyObject(rows, name)) {
                     // must start with # and be at least 2 characters
                     if (!value.startsWith("#") || value.length() <= 1) {
                         result.addInvalidReference(name, value);
@@ -1129,6 +1203,45 @@ public class DefaultCamelCatalog implements CamelCatalog {
         return sb.toString();
     }
 
+    @Override
+    public SimpleValidationResult validateSimpleExpression(String simple) {
+        return doValidateSimple(simple, false);
+    }
+
+    @Override
+    public SimpleValidationResult validateSimplePredicate(String simple) {
+        return doValidateSimple(simple, true);
+    }
+
+    private SimpleValidationResult doValidateSimple(String simple, boolean predicate) {
+        SimpleValidationResult answer = new SimpleValidationResult(simple);
+
+        Object instance = null;
+        Class clazz = null;
+        try {
+            clazz = DefaultCamelCatalog.class.getClassLoader().loadClass("org.apache.camel.language.simple.SimpleLanguage");
+            instance = clazz.newInstance();
+        } catch (Exception e) {
+            // ignore
+        }
+
+        if (clazz != null && instance != null) {
+            try {
+                if (predicate) {
+                    instance.getClass().getMethod("createPredicate", String.class).invoke(instance, simple);
+                } else {
+                    instance.getClass().getMethod("createExpression", String.class).invoke(instance, simple);
+                }
+            } catch (InvocationTargetException e) {
+                answer.setError(e.getTargetException().getMessage());
+            } catch (Exception e) {
+                answer.setError(e.getMessage());
+            }
+        }
+
+        return answer;
+    }
+
     /**
      * Special logic for log endpoints to deal when showAll=true
      */
@@ -1155,27 +1268,38 @@ public class DefaultCamelCatalog implements CamelCatalog {
 
     @Override
     public String listComponentsAsJson() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("[");
-        List<String> names = findComponentNames();
-        for (int i = 0; i < names.size(); i++) {
-            String scheme = names.get(i);
-            String json = componentJSonSchema(scheme);
-            // skip first line
-            json = CatalogHelper.between(json, "\"component\": {", "\"componentProperties\": {");
-            json = json != null ? json.trim() : "";
-            // skip last comma if not the last
-            if (i == names.size() - 1) {
-                json = json.substring(0, json.length() - 1);
-            }
-            sb.append("\n");
-            sb.append("  {\n");
-            sb.append("    ");
-            sb.append(json);
+        String answer = null;
+        if (caching) {
+            answer = (String) cache.get("listComponentsAsJson");
         }
 
-        sb.append("\n]");
-        return sb.toString();
+        if (answer == null) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("[");
+            List<String> names = findComponentNames();
+            for (int i = 0; i < names.size(); i++) {
+                String scheme = names.get(i);
+                String json = componentJSonSchema(scheme);
+                // skip first line
+                json = CatalogHelper.between(json, "\"component\": {", "\"componentProperties\": {");
+                json = json != null ? json.trim() : "";
+                // skip last comma if not the last
+                if (i == names.size() - 1) {
+                    json = json.substring(0, json.length() - 1);
+                }
+                sb.append("\n");
+                sb.append("  {\n");
+                sb.append("    ");
+                sb.append(json);
+            }
+            sb.append("\n]");
+            answer = sb.toString();
+            if (caching) {
+                cache.put("listComponentsAsJson", answer);
+            }
+        }
+
+        return answer;
     }
 
     @Override

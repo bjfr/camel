@@ -14,16 +14,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.camel.component.google.calendar;
+package org.apache.camel.catalog;
 
-import java.util.Collection;
+import java.io.Serializable;
 
-import com.google.api.services.calendar.Calendar;
+public class SimpleValidationResult implements Serializable {
 
-public interface GoogleCalendarClientFactory {
+    private final String simple;
+    private String error;
 
-    Calendar makeClient(String clientId, String clientSecret, Collection<String> scopes,
-                        String applicationName, String refreshToken, String accessToken,
-                        String emailAddress, String p12FileName, String user);
+    public SimpleValidationResult(String simple) {
+        this.simple = simple;
+    }
 
+    public String getSimple() {
+        return simple;
+    }
+
+    public boolean isSuccess() {
+        return error == null;
+    }
+
+    public void setError(String error) {
+        this.error = error;
+    }
+
+    public String getError() {
+        return error;
+    }
 }
