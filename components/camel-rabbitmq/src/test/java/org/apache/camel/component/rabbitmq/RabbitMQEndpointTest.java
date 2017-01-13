@@ -198,7 +198,7 @@ public class RabbitMQEndpointTest extends CamelTestSupport {
         assertEquals(ConnectionFactory.DEFAULT_FRAME_MAX, connectionFactory.getRequestedFrameMax());
         assertEquals(ConnectionFactory.DEFAULT_HEARTBEAT, connectionFactory.getRequestedHeartbeat());
         assertFalse(connectionFactory.isSSL());
-        assertFalse(connectionFactory.isAutomaticRecoveryEnabled());
+        assertTrue(connectionFactory.isAutomaticRecoveryEnabled());
         assertEquals(5000, connectionFactory.getNetworkRecoveryInterval());
         assertTrue(connectionFactory.isTopologyRecoveryEnabled());
     }
@@ -253,5 +253,23 @@ public class RabbitMQEndpointTest extends CamelTestSupport {
     public void createEndpointWithSkipQueueDeclareEnabled() throws Exception {
         RabbitMQEndpoint endpoint = context.getEndpoint("rabbitmq:localhost/exchange?skipQueueDeclare=true", RabbitMQEndpoint.class);
         assertTrue(endpoint.isSkipQueueDeclare());
+    }
+    
+    @Test
+    public void createEndpointWithSkipExchangeDeclareEnabled() throws Exception {
+        RabbitMQEndpoint endpoint = context.getEndpoint("rabbitmq:localhost/exchange?skipExchangeDeclare=true", RabbitMQEndpoint.class);
+        assertTrue(endpoint.isSkipExchangeDeclare());
+    }
+    
+    @Test
+    public void createEndpointWithSkipQueueBindEndabled() throws Exception {
+        RabbitMQEndpoint endpoint = context.getEndpoint("rabbitmq:localhost/exchange?SkipQueueBind=true", RabbitMQEndpoint.class);
+        assertTrue(endpoint.isSkipQueueBind());
+    }
+
+    @Test
+    public void createEndpointWithExclusiveEnabled() throws Exception {
+        RabbitMQEndpoint endpoint = context.getEndpoint("rabbitmq:localhost/exchange?exclusive=true", RabbitMQEndpoint.class);
+        assertTrue(endpoint.isExclusive());
     }
 }

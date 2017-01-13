@@ -1,4 +1,7 @@
-# Welcome to Apache Camel
+# Apache Camel
+
+[![Maven Central](https://maven-badges.herokuapp.com/maven-central/org.apache.camel/apache-camel/badge.svg?style=flat-square)](https://maven-badges.herokuapp.com/maven-central/org.apache.camel/apache-camel)
+[![Javadocs](http://www.javadoc.io/badge/org.apache.camel/apache-camel.svg?color=brightgreen)](http://www.javadoc.io/doc/org.apache.camel/camel-core)
 
 [Apache Camel](http://camel.apache.org/) is a powerful open source integration framework based on known
 Enterprise Integration Patterns with powerful Bean Integration.
@@ -110,12 +113,13 @@ The following provides more details on the included cryptographic
 software:
 
 * **camel-ahc** can be configured to use https
+* **camel-atmosphere-websocket** can be used for secure communications
 * **camel-crypto** can be used for secure communications
 * **camel-cxf** can be configured for secure communications
 * **camel-ftp** can be configured for secure communications
-* **camel-gae** can be configured for secure communications
 * **camel-http** can be configured to use https
 * **camel-http4** can be configured to use https
+* **camel-infinispan** can be configured for secure communications
 * **camel-jasypt** can be used for secure communications
 * **camel-jetty** can be configured to use https
 * **camel-mail** can be configured for secure communications
@@ -124,3 +128,4 @@ software:
 * **camel-netty4-http** can be configured to use https
 * **camel-undertow** can be configured to use https
 * **camel-xmlsecurity** can be configured for secure communications
+

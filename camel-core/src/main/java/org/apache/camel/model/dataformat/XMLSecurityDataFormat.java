@@ -32,7 +32,7 @@ import org.apache.camel.spi.NamespaceAware;
 import org.apache.camel.util.jsse.KeyStoreParameters;
 
 /**
- * xml-security data format
+ * XML-Security data format
  */
 @Metadata(label = "dataformat,transformation,xml,security", title = "XML Security")
 @XmlRootElement(name = "secureXML")
@@ -475,5 +475,9 @@ public class XMLSecurityDataFormat extends DataFormatDefinition implements Names
         }
         this.namespaces.putAll(nspaces);
     }
-    
+
+    @Override
+    public Map<String, String> getNamespaces() {
+        return namespaces;
+    }
 }

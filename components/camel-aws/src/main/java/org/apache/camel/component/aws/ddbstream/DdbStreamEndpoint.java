@@ -56,14 +56,6 @@ public class DdbStreamEndpoint extends ScheduledPollEndpoint {
             + " MUST be supplied.",
             defaultValue = "LATEST")
     private ShardIteratorType iteratorType = ShardIteratorType.LATEST;
-    // TODO add the ability to use ShardIteratorType.{AT,AFTER}_SEQUENCE_NUMBER
-    // by specifying either a sequence number itself or a bean to fetch the
-    // sequence number from persistant storage or somewhere else.
-    // This can be done by having the type of the parameter an interface
-    // and supplying a default implementation and a converter from a long/String
-    // to an instance of this interface.
-    // Note that the shard list needs to have the ability to start at the shard
-    // that includes the supplied sequence number
 
     @UriParam(label = "consumer", description = "Provider for the sequence number when"
             + " using one of the two ShardIteratorType.{AT,AFTER}_SEQUENCE_NUMBER"
@@ -84,6 +76,7 @@ public class DdbStreamEndpoint extends ScheduledPollEndpoint {
     public Consumer createConsumer(Processor processor) throws Exception {
         DdbStreamConsumer consumer = new DdbStreamConsumer(this, processor);
         consumer.setSchedulerProperties(consumer.getEndpoint().getSchedulerProperties());
+        configureConsumer(consumer);
         return consumer;
     }
 

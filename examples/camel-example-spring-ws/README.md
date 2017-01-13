@@ -12,29 +12,30 @@ To run the example, you need to start up the server by typing
 
 	mvn jetty:run
 
-To stop the server hit `ctrl + c`
+To stop the server hit <kbd>ctrl</kbd>+<kbd>c</kbd>
 
 
 The web service endpoint address is:
   <http://localhost:8080/increment>
- 
+
 The WSDL is available at:
   <http://localhost:8080/increment/increment.wsdl>
 
 
-You can test the web service using for example SOAP-UI. This excellent tool is freely available from http://www.soapui.org. 
-There's a ready to use SOAP-UI project available in the `client` directory. 
+You can test the web service using for example SOAP-UI. This excellent tool is freely available from http://www.soapui.org.
+There's a ready to use SOAP-UI project available in the `client` directory.
 
 ### Documentation
 This example is documented at <http://camel.apache.org/spring-ws-example.html>
 
-### Forum, Help, etc 
+### Forum, Help, etc
 
-If you hit an problems please let us know on the Camel Forums <http://camel.apache.org/discussion-forums.html>
+If you hit an problems please let us know on the Camel Forums
+	<http://camel.apache.org/discussion-forums.html>
 
 Please help us make Apache Camel better - we appreciate any feedback you may
 have.  Enjoy!
 
 
-------------------------
+
 The Camel riders!

@@ -32,11 +32,12 @@ import org.apache.camel.component.hbase.model.HBaseRow;
 import org.apache.camel.impl.ScheduledBatchPollingConsumer;
 import org.apache.camel.util.CastUtils;
 import org.apache.camel.util.ObjectHelper;
-import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.PageFilter;
@@ -61,15 +62,14 @@ public class HBaseConsumer extends ScheduledBatchPollingConsumer {
 
     @Override
     protected int poll() throws Exception {
-        HTableInterface table = endpoint.getTable();
-        try {
+        try (Table table = endpoint.getTable()) {
             shutdownRunningTask = null;
             pendingExchanges = 0;
 
-            Queue<Exchange> queue = new LinkedList<Exchange>();
+            Queue<Exchange> queue = new LinkedList<>();
 
             Scan scan = new Scan();
-            List<Filter> filters = new LinkedList<Filter>();
+            List<Filter> filters = new LinkedList<>();
             if (endpoint.getFilters() != null) {
                 filters.addAll(endpoint.getFilters());
             }
@@ -103,29 +103,31 @@ public class HBaseConsumer extends ScheduledBatchPollingConsumer {
                 byte[] row = result.getRow();
                 resultRow.setId(endpoint.getCamelContext().getTypeConverter().convertTo(rowModel.getRowType(), row));
 
-                List<KeyValue> keyValues = result.list();
-                if (keyValues != null) {
+                List<Cell> cells = result.listCells();
+                if (cells != null) {
                     Set<HBaseCell> cellModels = rowModel.getCells();
                     if (cellModels.size() > 0) {
                         for (HBaseCell modelCell : cellModels) {
                             HBaseCell resultCell = new HBaseCell();
                             String family = modelCell.getFamily();
                             String column = modelCell.getQualifier();
-                            resultCell.setValue(endpoint.getCamelContext().getTypeConverter().convertTo(modelCell.getValueType(),
-                                    result.getValue(HBaseHelper.getHBaseFieldAsBytes(family), HBaseHelper.getHBaseFieldAsBytes(column))));
+                            resultCell.setValue(endpoint.getCamelContext().getTypeConverter().convertTo(
+                                modelCell.getValueType(),
+                                result.getValue(HBaseHelper.getHBaseFieldAsBytes(family), HBaseHelper.getHBaseFieldAsBytes(column)))
+                            );
                             resultCell.setFamily(modelCell.getFamily());
                             resultCell.setQualifier(modelCell.getQualifier());
                             resultRow.getCells().add(resultCell);
                         }
                     } else {
                         // just need to put every key value into the result Cells
-                        for (KeyValue keyValue : keyValues) {
-                            String qualifier = new String(keyValue.getQualifier());
-                            String family = new String(keyValue.getFamily());
+                        for (Cell cell : cells) {
+                            String qualifier = new String(CellUtil.cloneQualifier(cell));
+                            String family = new String(CellUtil.cloneFamily(cell));
                             HBaseCell resultCell = new HBaseCell();
                             resultCell.setFamily(family);
                             resultCell.setQualifier(qualifier);
-                            resultCell.setValue(endpoint.getCamelContext().getTypeConverter().convertTo(String.class, keyValue.getValue()));
+                            resultCell.setValue(endpoint.getCamelContext().getTypeConverter().convertTo(String.class, CellUtil.cloneValue(cell)));
                             resultRow.getCells().add(resultCell); 
                         }
                     }
@@ -136,15 +138,13 @@ public class HBaseConsumer extends ScheduledBatchPollingConsumer {
                     exchange.getIn().setHeader(CellMappingStrategyFactory.STRATEGY, CellMappingStrategyFactory.BODY);
                     mappingStrategy.applyScanResults(exchange.getIn(), data);
                     //Make sure that there is a header containing the marked row ids, so that they can be deleted.
-                    exchange.getIn().setHeader(HbaseAttribute.HBASE_MARKED_ROW_ID.asHeader(), result.getRow());
+                    exchange.getIn().setHeader(HBaseAttribute.HBASE_MARKED_ROW_ID.asHeader(), result.getRow());
                     queue.add(exchange);
                     exchangeCount++;
                 }
             }
             scanner.close();
             return queue.isEmpty() ? 0 : processBatch(CastUtils.cast(queue));
-        } finally {
-            table.close();
         }
     }
 
@@ -154,7 +154,7 @@ public class HBaseConsumer extends ScheduledBatchPollingConsumer {
 
         // limit if needed
         if (maxMessagesPerPoll > 0 && total > maxMessagesPerPoll) {
-            LOG.debug("Limiting to maximum messages to poll {} as there was {} messages in this poll.", maxMessagesPerPoll, total);
+            LOG.debug("Limiting to maximum messages to poll {} as there were {} messages in this poll.", maxMessagesPerPoll, total);
             total = maxMessagesPerPoll;
         }
 
@@ -177,7 +177,7 @@ public class HBaseConsumer extends ScheduledBatchPollingConsumer {
             }
 
             if (endpoint.isRemove()) {
-                remove((byte[]) exchange.getIn().getHeader(HbaseAttribute.HBASE_MARKED_ROW_ID.asHeader()));
+                remove((byte[]) exchange.getIn().getHeader(HBaseAttribute.HBASE_MARKED_ROW_ID.asHeader()));
             }
         }
 
@@ -188,11 +188,8 @@ public class HBaseConsumer extends ScheduledBatchPollingConsumer {
      * Delegates to the {@link HBaseRemoveHandler}.
      */
     private void remove(byte[] row) throws IOException {
-        HTableInterface table = endpoint.getTable();
-        try {
+        try (Table table = endpoint.getTable()) {
             endpoint.getRemoveHandler().remove(table, row);
-        } finally {
-            table.close();
         }
     }
 

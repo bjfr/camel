@@ -23,6 +23,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeoutException;
+
 import javax.net.ssl.TrustManager;
 
 import com.rabbitmq.client.AMQP;
@@ -31,6 +32,8 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.Envelope;
+
+import org.apache.camel.AsyncEndpoint;
 import org.apache.camel.Consumer;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
@@ -41,14 +44,14 @@ import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.UriEndpoint;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.spi.UriPath;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+/**
+ * The rabbitmq component allows you produce and consume messages from <a href="http://www.rabbitmq.com/">RabbitMQ</a> instances.
+ */
 @UriEndpoint(scheme = "rabbitmq", title = "RabbitMQ", syntax = "rabbitmq:hostname:portNumber/exchangeName", consumerClass = RabbitMQConsumer.class, label = "messaging")
-public class RabbitMQEndpoint extends DefaultEndpoint {
+public class RabbitMQEndpoint extends DefaultEndpoint implements AsyncEndpoint {
     // header to indicate that the message body needs to be de-serialized
     public static final String SERIALIZE_HEADER = "CamelSerialize";
-    private static final Logger LOG = LoggerFactory.getLogger(RabbitMQEndpoint.class);
 
     @UriPath @Metadata(required = "true")
     private String hostname;
@@ -56,53 +59,59 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
     private int portNumber;
     @UriPath @Metadata(required = "true")
     private String exchangeName;
-    @UriParam(defaultValue = ConnectionFactory.DEFAULT_USER)
+    @UriParam(label = "security", defaultValue = ConnectionFactory.DEFAULT_USER, secret = true)
     private String username = ConnectionFactory.DEFAULT_USER;
-    @UriParam(defaultValue = ConnectionFactory.DEFAULT_PASS)
+    @UriParam(label = "security", defaultValue = ConnectionFactory.DEFAULT_PASS, secret = true)
     private String password = ConnectionFactory.DEFAULT_PASS;
     @UriParam(defaultValue = ConnectionFactory.DEFAULT_VHOST)
     private String vhost = ConnectionFactory.DEFAULT_VHOST;
-    @UriParam(label = "consumer", defaultValue = "10")
+    @UriParam(label = "consumer,advanced", defaultValue = "10")
     private int threadPoolSize = 10;
     @UriParam(label = "consumer", defaultValue = "true")
     private boolean autoAck = true;
-    @UriParam(defaultValue = "true")
+    @UriParam(label = "common", defaultValue = "true")
     private boolean autoDelete = true;
-    @UriParam(defaultValue = "true")
+    @UriParam(label = "common", defaultValue = "true")
     private boolean durable = true;
+    @UriParam(label = "common", defaultValue = "false")
+    private boolean exclusive;
     @UriParam(label = "producer")
     private boolean bridgeEndpoint;
-    @UriParam
+    @UriParam(label = "common")
     private String queue = String.valueOf(UUID.randomUUID().toString().hashCode());
-    @UriParam(defaultValue = "direct", enums = "direct,fanout,headers,topic")
+    @UriParam(label = "common", defaultValue = "direct", enums = "direct,fanout,headers,topic")
     private String exchangeType = "direct";
-    @UriParam
+    @UriParam(label = "common")
     private String routingKey;
-    @UriParam(label = "producer")
+    @UriParam(label = "common")
     private boolean skipQueueDeclare;
-    @UriParam
+    @UriParam(label = "common")
+    private boolean skipQueueBind;
+    @UriParam(label = "common")
+    private boolean skipExchangeDeclare;
+    @UriParam(label = "advanced")
     private Address[] addresses;
     @UriParam(defaultValue = "" + ConnectionFactory.DEFAULT_CONNECTION_TIMEOUT)
     private int connectionTimeout = ConnectionFactory.DEFAULT_CONNECTION_TIMEOUT;
-    @UriParam(defaultValue = "" + ConnectionFactory.DEFAULT_CHANNEL_MAX)
+    @UriParam(label = "advanced", defaultValue = "" + ConnectionFactory.DEFAULT_CHANNEL_MAX)
     private int requestedChannelMax = ConnectionFactory.DEFAULT_CHANNEL_MAX;
-    @UriParam(defaultValue = "" + ConnectionFactory.DEFAULT_FRAME_MAX)
+    @UriParam(label = "advanced", defaultValue = "" + ConnectionFactory.DEFAULT_FRAME_MAX)
     private int requestedFrameMax = ConnectionFactory.DEFAULT_FRAME_MAX;
-    @UriParam(defaultValue = "" + ConnectionFactory.DEFAULT_HEARTBEAT)
+    @UriParam(label = "advanced", defaultValue = "" + ConnectionFactory.DEFAULT_HEARTBEAT)
     private int requestedHeartbeat = ConnectionFactory.DEFAULT_HEARTBEAT;
-    @UriParam
+    @UriParam(label = "security")
     private String sslProtocol;
-    @UriParam
+    @UriParam(label = "security")
     private TrustManager trustManager;
-    @UriParam
+    @UriParam(label = "advanced")
     private Map<String, Object> clientProperties;
-    @UriParam
+    @UriParam(label = "advanced")
     private ConnectionFactory connectionFactory;
-    @UriParam
+    @UriParam(label = "advanced")
     private Boolean automaticRecoveryEnabled;
-    @UriParam
+    @UriParam(label = "advanced")
     private Integer networkRecoveryInterval;
-    @UriParam
+    @UriParam(label = "advanced")
     private Boolean topologyRecoveryEnabled;
     @UriParam(label = "consumer")
     private boolean prefetchEnabled;
@@ -116,13 +125,13 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
     private int concurrentConsumers = 1;
     @UriParam(defaultValue = "true")
     private boolean declare = true;
-    @UriParam
+    @UriParam(label = "common")
     private String deadLetterExchange;
-    @UriParam
+    @UriParam(label = "common")
     private String deadLetterRoutingKey;
-    @UriParam
+    @UriParam(label = "common")
     private String deadLetterQueue;
-    @UriParam(defaultValue = "direct", enums = "direct,fanout,headers,topic")
+    @UriParam(label = "common", defaultValue = "direct", enums = "direct,fanout,headers,topic")
     private String deadLetterExchangeType = "direct";
     @UriParam(label = "producer", defaultValue = "10")
     private int channelPoolMaxSize = 10;
@@ -132,20 +141,22 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
     private boolean mandatory;
     @UriParam(label = "producer")
     private boolean immediate;
-    @UriParam
+    @UriParam(label = "advanced")
     private ArgsConfigurer queueArgsConfigurer;
-    @UriParam
+    @UriParam(label = "advanced")
     private ArgsConfigurer exchangeArgsConfigurer;
-    @UriParam
+    @UriParam(label = "advanced")
     private long requestTimeout = 20000;
-    @UriParam
+    @UriParam(label = "advanced")
     private long requestTimeoutCheckerInterval = 1000;
-    @UriParam
+    @UriParam(label = "advanced")
     private boolean transferException;
     @UriParam(label = "producer")
     private boolean publisherAcknowledgements;
     @UriParam(label = "producer")
     private long publisherAcknowledgementsTimeout;
+    @UriParam(label = "producer")
+    private boolean guaranteedDeliveries;
     // camel-jms supports this setting but it is not currently configurable in camel-rabbitmq
     private boolean useMessageIDAsCorrelationID = true;
     // camel-jms supports this setting but it is not currently configurable in camel-rabbitmq
@@ -403,6 +414,29 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
 
     public boolean isSkipQueueDeclare() {
         return skipQueueDeclare;
+    }
+
+    /**
+     * If true the queue will not be bound to the exchange after declaring it
+     * @return
+     */
+    public boolean isSkipQueueBind() {
+        return skipQueueBind;
+    }
+
+    public void setSkipQueueBind(boolean skipQueueBind) {
+        this.skipQueueBind = skipQueueBind;
+    }
+
+    /**
+     * This can be used if we need to declare the queue but not the exchange
+     */
+    public void setSkipExchangeDeclare(boolean skipExchangeDeclare) {
+        this.skipExchangeDeclare = skipExchangeDeclare;
+    }
+
+    public boolean isSkipExchangeDeclare() {
+        return skipExchangeDeclare;
     }
 
     /**
@@ -772,7 +806,7 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
     }
 
     /**
-     * When true and an inOut Exchange failed on the consumer side send the caused Exception back in the response 
+     * When true and an inOut Exchange failed on the consumer side send the caused Exception back in the response
      */
     public void setTransferException(boolean transferException) {
         this.transferException = transferException;
@@ -805,6 +839,22 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
     }
 
     /**
+     * When true, an exception will be thrown when the message cannot be delivered (basic.return) and the message is
+     * marked as mandatory.
+     * PublisherAcknowledgement will also be activated in this case
+     *
+     * See also <a href=https://www.rabbitmq.com/confirms.html">publisher acknowledgements</a> - When will messages be
+     * confirmed?
+     */
+    public boolean isGuaranteedDeliveries() {
+        return guaranteedDeliveries;
+    }
+
+    public void setGuaranteedDeliveries(boolean guaranteedDeliveries) {
+        this.guaranteedDeliveries = guaranteedDeliveries;
+    }
+
+    /**
      * Get replyToType for inOut exchange
      */
     public String getReplyToType() {
@@ -816,6 +866,17 @@ public class RabbitMQEndpoint extends DefaultEndpoint {
      */
     public String getReplyTo() {
         return replyTo;
+    }
+
+    public boolean isExclusive() {
+        return exclusive;
+    }
+
+    /**
+     * Exclusive queues may only be accessed by the current connection, and are deleted when that connection closes.
+     */
+    public void setExclusive(boolean exclusive) {
+        this.exclusive = exclusive;
     }
 
 }

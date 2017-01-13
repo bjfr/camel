@@ -49,6 +49,7 @@ import org.apache.maven.model.Exclusion;
 import org.apache.maven.model.Resource;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugin.descriptor.PluginDescriptor;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.MavenProjectBuilder;
 import org.apache.maven.project.artifact.MavenMetadataSource;
@@ -63,7 +64,7 @@ import org.codehaus.mojo.exec.Property;
  *
  * @goal run
  * @requiresDependencyResolution compile+runtime
- * @execute phase="test-compile"
+ * @execute phase="prepare-package"
  */
 public class RunMojo extends AbstractExecMojo {
 
@@ -105,17 +106,15 @@ public class RunMojo extends AbstractExecMojo {
      * Whether to use Blueprint when running, instead of Spring
      *
      * @parameter property="camel.useBlueprint"
-     *            default-value="false"
      */
-    protected boolean useBlueprint;
+    protected Boolean useBlueprint;
 
     /**
      * Whether to use CDI when running, instead of Spring
      *
      * @parameter property="camel.useCDI"
-     *            default-value="false"
      */
-    protected boolean useCDI;
+    protected Boolean useCDI;
     
     protected String extendedPluginDependencyArtifactId;
 
@@ -216,6 +215,14 @@ public class RunMojo extends AbstractExecMojo {
      * @parameter property="camel.configAdminFileName"
      */
     private String configAdminFileName;
+
+    /**
+     * To watch the directory for file changes which triggers
+     * a live reload of the Camel routes on-the-fly.
+     *
+     * @parameter property="camel.fileWatcherDirectory"
+     */
+    private String fileWatcherDirectory;
 
     /**
      * The class arguments.
@@ -359,9 +366,32 @@ public class RunMojo extends AbstractExecMojo {
      * @throws MojoFailureException something bad happened...
      */
     public void execute() throws MojoExecutionException, MojoFailureException {
+
+        String skip = System.getProperties().getProperty("maven.test.skip");
+        if (skip == null || "false".equals(skip)) {
+            // lets log a INFO about how to skip tests if you want to so you can run faster
+            getLog().info("You can skip tests from the command line using: mvn camel:run -Dmaven.test.skip=true");
+        }
+
         boolean usingSpringJavaConfigureMain = false;
-        boolean useCdiMain = useCDI || detectCDIOnClassPath();
-        boolean usingBlueprintMain = useBlueprint || detectBlueprintOnClassPathOrBlueprintXMLFiles();
+
+        boolean useCdiMain;
+        if (useCDI != null) {
+            // use configured value
+            useCdiMain = useCDI;
+        } else {
+            // auto detect if we have cdi
+            useCdiMain = detectCDIOnClassPath();
+        }
+        boolean usingBlueprintMain;
+        if (useBlueprint != null) {
+            // use configured value
+            usingBlueprintMain = useBlueprint;
+        } else {
+            // auto detect if we have blueprint
+            usingBlueprintMain = detectBlueprintOnClassPathOrBlueprintXMLFiles();
+        }
+
         if (killAfter != -1) {
             getLog().warn("Warning: killAfter is now deprecated. Do you need it ? Please comment on MEXEC-6.");
         }
@@ -370,6 +400,10 @@ public class RunMojo extends AbstractExecMojo {
         List<String> args = new ArrayList<String>();
         if (trace) {
             args.add("-t");
+        }
+        if (fileWatcherDirectory != null) {
+            args.add("-watch");
+            args.add(fileWatcherDirectory);
         }
 
         if (applicationContextUri != null) {
@@ -523,7 +557,7 @@ public class RunMojo extends AbstractExecMojo {
     class IsolatedThreadGroup extends ThreadGroup {
         Throwable uncaughtException; // synchronize access to this
 
-        public IsolatedThreadGroup(String name) {
+        IsolatedThreadGroup(String name) {
             super(name);
         }
 
@@ -922,8 +956,26 @@ public class RunMojo extends AbstractExecMojo {
                 relevantDependencies = this.resolveExecutableDependencies(executablePomArtifact, false);
             }
         } else {
-            relevantDependencies = Collections.emptySet();
-            getLog().debug("Plugin Dependencies will be excluded.");
+            getLog().debug("Only Direct Plugin Dependencies will be included.");
+            PluginDescriptor descriptor = (PluginDescriptor) getPluginContext().get("pluginDescriptor");
+            try {
+                relevantDependencies = artifactResolver
+                    .resolveTransitively(MavenMetadataSource
+                        .createArtifacts(this.artifactFactory,
+                            descriptor.getPlugin().getDependencies(),
+                            null, null, null),
+                        this.project.getArtifact(),
+                        Collections.emptyMap(),
+                        this.localRepository,
+                        this.remoteRepositories,
+                        metadataSource,
+                        new ScopeArtifactFilter(Artifact.SCOPE_RUNTIME),
+                        Collections.emptyList())
+                    .getArtifacts();
+            } catch (Exception ex) {
+                throw new MojoExecutionException("Encountered problems resolving dependencies of the plugin "
+                    + "in preparation for its execution.", ex);
+            }
         }
         return relevantDependencies;
     }

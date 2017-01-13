@@ -35,12 +35,14 @@ import org.apache.camel.model.dataformat.CsvDataFormat;
 import org.apache.camel.model.dataformat.CustomDataFormat;
 import org.apache.camel.model.dataformat.GzipDataFormat;
 import org.apache.camel.model.dataformat.HL7DataFormat;
+import org.apache.camel.model.dataformat.HessianDataFormat;
 import org.apache.camel.model.dataformat.IcalDataFormat;
 import org.apache.camel.model.dataformat.JacksonXMLDataFormat;
 import org.apache.camel.model.dataformat.JaxbDataFormat;
 import org.apache.camel.model.dataformat.JibxDataFormat;
 import org.apache.camel.model.dataformat.JsonDataFormat;
 import org.apache.camel.model.dataformat.JsonLibrary;
+import org.apache.camel.model.dataformat.LZFDataFormat;
 import org.apache.camel.model.dataformat.MimeMultipartDataFormat;
 import org.apache.camel.model.dataformat.PGPDataFormat;
 import org.apache.camel.model.dataformat.ProtobufDataFormat;
@@ -49,11 +51,14 @@ import org.apache.camel.model.dataformat.SerializationDataFormat;
 import org.apache.camel.model.dataformat.SoapJaxbDataFormat;
 import org.apache.camel.model.dataformat.StringDataFormat;
 import org.apache.camel.model.dataformat.SyslogDataFormat;
+import org.apache.camel.model.dataformat.TarFileDataFormat;
 import org.apache.camel.model.dataformat.TidyMarkupDataFormat;
 import org.apache.camel.model.dataformat.XMLBeansDataFormat;
 import org.apache.camel.model.dataformat.XMLSecurityDataFormat;
 import org.apache.camel.model.dataformat.XStreamDataFormat;
 import org.apache.camel.model.dataformat.XmlJsonDataFormat;
+import org.apache.camel.model.dataformat.YAMLDataFormat;
+import org.apache.camel.model.dataformat.YAMLLibrary;
 import org.apache.camel.model.dataformat.ZipDataFormat;
 import org.apache.camel.model.dataformat.ZipFileDataFormat;
 import org.apache.camel.util.CollectionStringBuffer;
@@ -154,6 +159,18 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     }
     
     /**
+     * Uses the beanio data format
+     */
+    public T beanio(String mapping, String streamName, String encoding, String beanReaderErrorHandlerType) {
+        BeanioDataFormat dataFormat = new BeanioDataFormat();
+        dataFormat.setMapping(mapping);
+        dataFormat.setStreamName(streamName);
+        dataFormat.setEncoding(encoding);
+        dataFormat.setBeanReaderErrorHandlerType(beanReaderErrorHandlerType);
+        return dataFormat(dataFormat);
+    }
+
+    /**
      * Uses the Bindy data format
      *
      * @param type      the type of bindy data format to use
@@ -239,6 +256,13 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     }
 
     /**
+     * Uses the Hessian data format
+     */
+    public T hessian() {
+        return dataFormat(new HessianDataFormat());
+    }
+
+    /**
      * Uses the HL7 data format
      */
     public T hl7() {
@@ -270,6 +294,14 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
         IcalDataFormat ical = new IcalDataFormat();
         ical.setValidating(validating);
         return dataFormat(ical);
+    }
+
+    /**
+     * Uses the LZF deflater data format
+     */
+    public T lzf() {
+        LZFDataFormat lzfdf = new LZFDataFormat();
+        return dataFormat(lzfdf);
     }
 
     /**
@@ -308,6 +340,30 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
         mm.setMultipartSubType(multipartSubType);
         mm.setMultipartWithoutAttachment(multipartWithoutAttachment);
         mm.setHeadersInline(headersInline);
+        mm.setBinaryContent(binaryContent);
+        return dataFormat(mm);
+    }
+
+    /**
+     * Uses the MIME Multipart data format
+     *
+     * @param multipartSubType           the subtype of the MIME Multipart
+     * @param multipartWithoutAttachment defines whether a message without attachment is also marshaled
+     *                                   into a MIME Multipart (with only one body part).
+     * @param headersInline              define the MIME Multipart headers as part of the message body
+     *                                   or as Camel headers
+     * @param includeHeaders            if headersInline is set to true all camel headers matching this
+     *                                   regex are also stored as MIME headers on the Multipart
+     * @param binaryContent              have binary encoding for binary content (true) or use Base-64
+     *                                   encoding for binary content (false)
+     */
+    public T mimeMultipart(String multipartSubType, boolean multipartWithoutAttachment, boolean headersInline,
+                           String includeHeaders, boolean binaryContent) {
+        MimeMultipartDataFormat mm = new MimeMultipartDataFormat();
+        mm.setMultipartSubType(multipartSubType);
+        mm.setMultipartWithoutAttachment(multipartWithoutAttachment);
+        mm.setHeadersInline(headersInline);
+        mm.setIncludeHeaders(includeHeaders);
         mm.setBinaryContent(binaryContent);
         return dataFormat(mm);
     }
@@ -838,6 +894,25 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
     }
 
     /**
+     * Uses the YAML data format
+     *
+     * @param library the yaml library to use
+     */
+    public T yaml(YAMLLibrary library) {
+        return dataFormat(new YAMLDataFormat(library));
+    }
+
+    /**
+     * Uses the YAML data format
+     *
+     * @param library the yaml type to use
+     * @param type the type for json snakeyaml type
+     */
+    public T yaml(YAMLLibrary library, Class<?> type) {
+        return dataFormat(new YAMLDataFormat(library, type));
+    }
+
+    /**
      * Uses the XML Security data format
      */
     public T secureXML() {
@@ -994,8 +1069,16 @@ public class DataFormatClause<T extends ProcessorDefinition<?>> {
         XMLSecurityDataFormat xsdf = new XMLSecurityDataFormat(secureTag, namespaces, secureTagContents, recipientKeyAlias, xmlCipherAlgorithm, 
                 keyCipherAlgorithm, keyOrTrustStoreParameters, keyPassword, digestAlgorithm);
         return dataFormat(xsdf);
-    }   
-    
+    }
+
+    /**
+     * Uses the Tar file data format
+     */
+    public T tarFile() {
+        TarFileDataFormat tfdf = new TarFileDataFormat();
+        return dataFormat(tfdf);
+    }
+
     /**
      * Uses the xmlBeans data format
      */

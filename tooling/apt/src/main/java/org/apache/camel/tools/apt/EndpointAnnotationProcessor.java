@@ -24,6 +24,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.annotation.processing.SupportedSourceVersion;
@@ -44,6 +45,7 @@ import org.apache.camel.spi.UriEndpoint;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.spi.UriParams;
 import org.apache.camel.spi.UriPath;
+import org.apache.camel.tools.apt.helper.CollectionStringBuffer;
 import org.apache.camel.tools.apt.helper.EndpointHelper;
 import org.apache.camel.tools.apt.helper.JsonSchemaHelper;
 import org.apache.camel.tools.apt.helper.Strings;
@@ -52,6 +54,14 @@ import org.apache.camel.tools.apt.model.ComponentOption;
 import org.apache.camel.tools.apt.model.EndpointOption;
 import org.apache.camel.tools.apt.model.EndpointPath;
 
+import static org.apache.camel.tools.apt.AnnotationProcessorHelper.dumpExceptionToErrorFile;
+import static org.apache.camel.tools.apt.AnnotationProcessorHelper.findFieldElement;
+import static org.apache.camel.tools.apt.AnnotationProcessorHelper.findJavaDoc;
+import static org.apache.camel.tools.apt.AnnotationProcessorHelper.findTypeElement;
+import static org.apache.camel.tools.apt.AnnotationProcessorHelper.implementsInterface;
+import static org.apache.camel.tools.apt.AnnotationProcessorHelper.loadResource;
+import static org.apache.camel.tools.apt.AnnotationProcessorHelper.processFile;
+import static org.apache.camel.tools.apt.AnnotationProcessorHelper.warning;
 import static org.apache.camel.tools.apt.helper.JsonSchemaHelper.sanitizeDescription;
 import static org.apache.camel.tools.apt.helper.Strings.canonicalClassName;
 import static org.apache.camel.tools.apt.helper.Strings.getOrElse;
@@ -62,8 +72,10 @@ import static org.apache.camel.tools.apt.helper.Strings.safeNull;
  * Processes all Camel {@link UriEndpoint}s and generate json schema and html documentation for the endpoint/component.
  */
 @SupportedAnnotationTypes({"org.apache.camel.spi.*"})
-@SupportedSourceVersion(SourceVersion.RELEASE_7)
-public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
+@SupportedSourceVersion(SourceVersion.RELEASE_8)
+public class EndpointAnnotationProcessor extends AbstractProcessor {
+
+    // CHECKSTYLE:OFF
 
     private static final String HEADER_FILTER_STRATEGY_JAVADOC = "To use a custom HeaderFilterStrategy to filter header to and from Camel message.";
 
@@ -84,7 +96,7 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
         return true;
     }
 
-    protected void processEndpointClass(final RoundEnvironment roundEnv, final TypeElement classElement) {
+    private void processEndpointClass(final RoundEnvironment roundEnv, final TypeElement classElement) {
         final UriEndpoint uriEndpoint = classElement.getAnnotation(UriEndpoint.class);
         if (uriEndpoint != null) {
             String scheme = uriEndpoint.scheme();
@@ -96,11 +108,18 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
                 // for example camel-mail has a bunch of component schema names that does that
                 String[] schemes = scheme.split(",");
                 String[] titles = title.split(",");
-                String[] extendsSchemes = extendsScheme != null ? extendsScheme.split(",") : null;
+                String[] extendsSchemes = extendsScheme.split(",");
                 for (int i = 0; i < schemes.length; i++) {
                     final String alias = schemes[i];
-                    final String extendsAlias = extendsSchemes != null ? (i < extendsSchemes.length ? extendsSchemes[i] : extendsSchemes[0]) : null;
-                    final String aliasTitle = i < titles.length ? titles[i] : titles[0];
+                    final String extendsAlias = i < extendsSchemes.length ? extendsSchemes[i] : extendsSchemes[0];
+                    String aTitle = i < titles.length ? titles[i] : titles[0];
+
+                    // some components offer a secure alternative which we need to amend the title accordingly
+                    if (secureAlias(schemes[0], alias)) {
+                        aTitle += " (Secure)";
+                    }
+                    final String aliasTitle = aTitle;
+
                     // write html documentation
                     String name = canonicalClassName(classElement.getQualifiedName().toString());
                     String packageName = name.substring(0, name.lastIndexOf("."));
@@ -108,33 +127,34 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
                     Func1<PrintWriter, Void> handler = new Func1<PrintWriter, Void>() {
                         @Override
                         public Void call(PrintWriter writer) {
-                            writeHtmlDocumentation(writer, roundEnv, classElement, uriEndpoint, aliasTitle, alias, extendsAlias, label);
+                            writeHtmlDocumentation(writer, roundEnv, classElement, uriEndpoint, aliasTitle, alias, extendsAlias, label, schemes);
                             return null;
                         }
                     };
-                    processFile(packageName, fileName, handler);
+                    processFile(processingEnv, packageName, fileName, handler);
 
                     // write json schema
                     fileName = alias + ".json";
                     handler = new Func1<PrintWriter, Void>() {
                         @Override
                         public Void call(PrintWriter writer) {
-                            writeJSonSchemeDocumentation(writer, roundEnv, classElement, uriEndpoint, aliasTitle, alias, extendsAlias, label);
+                            writeJSonSchemeDocumentation(writer, roundEnv, classElement, uriEndpoint, aliasTitle, alias, extendsAlias, label, schemes);
                             return null;
                         }
                     };
-                    processFile(packageName, fileName, handler);
+                    processFile(processingEnv, packageName, fileName, handler);
                 }
             }
         }
     }
 
     protected void writeHtmlDocumentation(PrintWriter writer, RoundEnvironment roundEnv, TypeElement classElement, UriEndpoint uriEndpoint,
-                                          String title, String scheme, String extendsScheme, String label) {
+                                          String title, String scheme, String extendsScheme, String label, String[] schemes) {
         // gather component information
         ComponentModel componentModel = findComponentProperties(roundEnv, uriEndpoint, classElement, title, scheme, extendsScheme, label);
 
         String syntax = componentModel.getSyntax();
+        String alternativeSyntax = componentModel.getAlternativeSyntax();
         String description = componentModel.getDescription();
 
         writer.println("<html>");
@@ -145,41 +165,63 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
         writer.println("<h1>" + title + "</h1>");
         writer.println("<b>Scheme:</b> " + scheme + "<br/>");
         writer.println("<b>Syntax:</b> " + syntax + "<br/>");
+        if (alternativeSyntax != null) {
+            writer.println("<b>Alternative Syntax:</b> " + alternativeSyntax + "<br/>");
+        }
+        // the first scheme is the regular so only output if there is alternatives
+        if (schemes != null && schemes.length > 1) {
+            CollectionStringBuffer csb = new CollectionStringBuffer(",");
+            for (String altScheme : schemes) {
+                csb.append(altScheme);
+            }
+            writer.println("<b>Alternative Schemes:</b> " + csb.toString() + "<br/>");
+        }
         writer.println("<b>Description:</b> " + description + "<br/>");
         writer.println("<b>Deprecated:</b>" + componentModel.isDeprecated() + "<br/>");
+        if (componentModel.isConsumerOnly()) {
+            writer.println("<b>ConsumerOnly:</b>" + "true" + "<br/>");
+        }
+        if (componentModel.isProducerOnly()) {
+            writer.println("<b>ProducerOnly:</b>" + "true" + "<br/>");
+        }
+        writer.println("<b>Async:</b>" + componentModel.isAsync() + "<br/>");
         writer.println("<b>Maven:</b> " + componentModel.getGroupId() + "/" + componentModel.getArtifactId() + "/" + componentModel.getVersionId() + "<br/>");
 
-        writeHtmlDocumentationAndFieldInjections(writer, roundEnv, componentModel, classElement, "");
+        writeHtmlDocumentationAndFieldInjections(writer, roundEnv, componentModel, classElement, "", uriEndpoint.excludeProperties());
 
-        // This code is not my fault, it seems to honestly be the hacky way to find a class name in APT :)
-        TypeMirror consumerType = null;
-        try {
-            uriEndpoint.consumerClass();
-        } catch (MirroredTypeException mte) {
-            consumerType = mte.getTypeMirror();
-        }
+        // only if its a consumer capable component
+        if (uriEndpoint.consumerOnly() || !uriEndpoint.producerOnly()) {
+            // This code is not my fault, it seems to honestly be the hacky way to find a class name in APT :)
+            TypeMirror consumerType = null;
+            try {
+                uriEndpoint.consumerClass();
+            } catch (MirroredTypeException mte) {
+                consumerType = mte.getTypeMirror();
+            }
 
-        boolean found = false;
-        String consumerClassName = null;
-        String consumerPrefix = getOrElse(uriEndpoint.consumerPrefix(), "");
-        if (consumerType != null) {
-            consumerClassName = consumerType.toString();
-            TypeElement consumerElement = findTypeElement(roundEnv, consumerClassName);
-            if (consumerElement != null) {
-                writer.println("<h2>" + scheme + " consumer" + "</h2>");
-                writeHtmlDocumentationAndFieldInjections(writer, roundEnv, componentModel, consumerElement, consumerPrefix);
-                found = true;
+            boolean found = false;
+            String consumerClassName = null;
+            String consumerPrefix = getOrElse(uriEndpoint.consumerPrefix(), "");
+            if (consumerType != null) {
+                consumerClassName = consumerType.toString();
+                TypeElement consumerElement = findTypeElement(processingEnv, roundEnv, consumerClassName);
+                if (consumerElement != null) {
+                    writer.println("<h2>" + scheme + " consumer" + "</h2>");
+                    writeHtmlDocumentationAndFieldInjections(writer, roundEnv, componentModel, consumerElement, consumerPrefix, uriEndpoint.excludeProperties());
+                    found = true;
+                }
+            }
+            if (!found && consumerClassName != null) {
+                warning(processingEnv, "APT cannot find consumer class " + consumerClassName);
             }
         }
-        if (!found && consumerClassName != null) {
-            warning("APT could not find consumer class " + consumerClassName);
-        }
+
         writer.println("</body>");
         writer.println("</html>");
     }
 
     protected void writeJSonSchemeDocumentation(PrintWriter writer, RoundEnvironment roundEnv, TypeElement classElement, UriEndpoint uriEndpoint,
-                                                String title, String scheme, String extendsScheme, String label) {
+                                                String title, String scheme, String extendsScheme, String label, String[] schemes) {
         // gather component information
         ComponentModel componentModel = findComponentProperties(roundEnv, uriEndpoint, classElement, title, scheme, extendsScheme, label);
 
@@ -188,19 +230,19 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
         Set<EndpointOption> endpointOptions = new LinkedHashSet<EndpointOption>();
         Set<ComponentOption> componentOptions = new LinkedHashSet<ComponentOption>();
 
-        TypeElement componentClassElement = findTypeElement(roundEnv, componentModel.getJavaType());
+        TypeElement componentClassElement = findTypeElement(processingEnv, roundEnv, componentModel.getJavaType());
         if (componentClassElement != null) {
             findComponentClassProperties(writer, roundEnv, componentModel, componentOptions, componentClassElement, "");
         }
 
-        findClassProperties(writer, roundEnv, componentModel, endpointPaths, endpointOptions, classElement, "");
+        findClassProperties(writer, roundEnv, componentModel, endpointPaths, endpointOptions, classElement, "", uriEndpoint.excludeProperties());
 
-        String json = createParameterJsonSchema(componentModel, componentOptions, endpointPaths, endpointOptions);
+        String json = createParameterJsonSchema(componentModel, componentOptions, endpointPaths, endpointOptions, schemes);
         writer.println(json);
     }
 
     public String createParameterJsonSchema(ComponentModel componentModel, Set<ComponentOption> componentOptions,
-                                            Set<EndpointPath> endpointPaths, Set<EndpointOption> endpointOptions) {
+                                            Set<EndpointPath> endpointPaths, Set<EndpointOption> endpointOptions, String[] schemes) {
         StringBuilder buffer = new StringBuilder("{");
         // component model
         buffer.append("\n \"component\": {");
@@ -209,15 +251,30 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
         if (!Strings.isNullOrEmpty(componentModel.getExtendsScheme())) {
             buffer.append("\n    \"extendsScheme\": \"").append(componentModel.getExtendsScheme()).append("\",");
         }
+        // the first scheme is the regular so only output if there is alternatives
+        if (schemes != null && schemes.length > 1) {
+            CollectionStringBuffer csb = new CollectionStringBuffer(",");
+            for (String altScheme : schemes) {
+                csb.append(altScheme);
+            }
+            buffer.append("\n    \"alternativeSchemes\": \"").append(csb.toString()).append("\",");
+        }
         buffer.append("\n    \"syntax\": \"").append(componentModel.getSyntax()).append("\",");
+        if (componentModel.getAlternativeSyntax() != null) {
+            buffer.append("\n    \"alternativeSyntax\": \"").append(componentModel.getAlternativeSyntax()).append("\",");
+        }
         buffer.append("\n    \"title\": \"").append(componentModel.getTitle()).append("\",");
         buffer.append("\n    \"description\": \"").append(componentModel.getDescription()).append("\",");
         buffer.append("\n    \"label\": \"").append(getOrElse(componentModel.getLabel(), "")).append("\",");
         buffer.append("\n    \"deprecated\": \"").append(componentModel.isDeprecated()).append("\",");
+        buffer.append("\n    \"async\": \"").append(componentModel.isAsync()).append("\",");
         if (componentModel.isConsumerOnly()) {
             buffer.append("\n    \"consumerOnly\": \"").append("true").append("\",");
         } else if (componentModel.isProducerOnly()) {
             buffer.append("\n    \"producerOnly\": \"").append("true").append("\",");
+        }
+        if (componentModel.isLenientProperties()) {
+            buffer.append("\n    \"lenientProperties\": \"").append("true").append("\",");
         }
         buffer.append("\n    \"javaType\": \"").append(componentModel.getJavaType()).append("\",");
         buffer.append("\n    \"groupId\": \"").append(componentModel.getGroupId()).append("\",");
@@ -249,8 +306,15 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
                 defaultValue = "false";
             }
 
+            // component options do not have prefix
+            String optionalPrefix = "";
+            String prefix = "";
+            boolean multiValue = false;
+            boolean asPredicate = false;
+
             buffer.append(JsonSchemaHelper.toJson(entry.getName(), "property", required, entry.getType(), defaultValue, doc,
-                    entry.isDeprecated(), entry.getGroup(), entry.getLabel(), entry.isEnumType(), entry.getEnums(), false, null));
+                entry.isDeprecated(), entry.isSecret(), entry.getGroup(), entry.getLabel(), entry.isEnumType(), entry.getEnums(),
+                false, null, asPredicate, optionalPrefix, prefix, multiValue));
         }
         buffer.append("\n  },");
 
@@ -294,8 +358,15 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
                 defaultValue = "false";
             }
 
+            // @UriPath options do not have prefix
+            String optionalPrefix = "";
+            String prefix = "";
+            boolean multiValue = false;
+            boolean asPredicate = false;
+
             buffer.append(JsonSchemaHelper.toJson(entry.getName(), "path", required, entry.getType(), defaultValue, doc,
-                    entry.isDeprecated(), entry.getGroup(), entry.getLabel(), entry.isEnumType(), entry.getEnums(), false, null));
+                entry.isDeprecated(), entry.isSecret(), entry.getGroup(), entry.getLabel(), entry.isEnumType(), entry.getEnums(),
+                false, null, asPredicate, optionalPrefix, prefix, multiValue));
         }
 
         // sort the endpoint options in the standard order we prefer
@@ -334,9 +405,14 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
                 // fallback as false for boolean types
                 defaultValue = "false";
             }
+            String optionalPrefix = entry.getOptionalPrefix();
+            String prefix = entry.getPrefix();
+            boolean multiValue = entry.isMultiValue();
+            boolean asPredicate = false;
 
             buffer.append(JsonSchemaHelper.toJson(entry.getName(), "parameter", required, entry.getType(), defaultValue,
-                    doc, entry.isDeprecated(), entry.getGroup(), entry.getLabel(), entry.isEnumType(), entry.getEnums(), false, null));
+                doc, entry.isDeprecated(), entry.isSecret(), entry.getGroup(), entry.getLabel(), entry.isEnumType(), entry.getEnums(),
+                false, null, asPredicate, optionalPrefix, prefix, multiValue));
         }
         buffer.append("\n  }");
 
@@ -345,7 +421,7 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
     }
 
     protected void writeHtmlDocumentationAndFieldInjections(PrintWriter writer, RoundEnvironment roundEnv, ComponentModel componentModel,
-                                                            TypeElement classElement, String prefix) {
+                                                            TypeElement classElement, String prefix, String excludeProperties) {
         String classDoc = processingEnv.getElementUtils().getDocComment(classElement);
         if (!isNullOrEmpty(classDoc)) {
             // remove dodgy @version that we may have in class javadoc
@@ -356,7 +432,7 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
 
         Set<EndpointPath> endpointPaths = new LinkedHashSet<EndpointPath>();
         Set<EndpointOption> endpointOptions = new LinkedHashSet<EndpointOption>();
-        findClassProperties(writer, roundEnv, componentModel, endpointPaths, endpointOptions, classElement, prefix);
+        findClassProperties(writer, roundEnv, componentModel, endpointPaths, endpointOptions, classElement, prefix, excludeProperties);
 
         // sort the endpoint options in the standard order we prefer
         List<EndpointPath> paths = new ArrayList<EndpointPath>();
@@ -416,6 +492,11 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
 
         // if the scheme is an alias then replace the scheme name from the syntax with the alias
         String syntax = scheme + ":" + Strings.after(uriEndpoint.syntax(), ":");
+        // alternative syntax is optional
+        if (!Strings.isNullOrEmpty(uriEndpoint.alternativeSyntax())) {
+            String alternativeSyntax = scheme + ":" + Strings.after(uriEndpoint.alternativeSyntax(), ":");
+            model.setAlternativeSyntax(alternativeSyntax);
+        }
 
         model.setExtendsScheme(extendsScheme);
         model.setSyntax(syntax);
@@ -423,14 +504,16 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
         model.setLabel(label);
         model.setConsumerOnly(uriEndpoint.consumerOnly());
         model.setProducerOnly(uriEndpoint.producerOnly());
+        model.setLenientProperties(uriEndpoint.lenientProperties());
+        model.setAsync(implementsInterface(processingEnv, roundEnv, endpointClassElement, "org.apache.camel.AsyncEndpoint"));
 
-        String data = loadResource("META-INF/services/org/apache/camel/component", scheme);
+        String data = loadResource(processingEnv, "META-INF/services/org/apache/camel/component", scheme);
         if (data != null) {
             Map<String, String> map = parseAsMap(data);
             model.setJavaType(map.get("class"));
         }
 
-        data = loadResource("META-INF/services/org/apache/camel", "component.properties");
+        data = loadResource(processingEnv, "META-INF/services/org/apache/camel", "component.properties");
         if (data != null) {
             Map<String, String> map = parseAsMap(data);
             // now we have a lot more data, so we need to load it as key/value
@@ -470,7 +553,7 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
 
         // favor to use endpoint class javadoc as description
         Elements elementUtils = processingEnv.getElementUtils();
-        TypeElement typeElement = findTypeElement(roundEnv, endpointClassElement.getQualifiedName().toString());
+        TypeElement typeElement = findTypeElement(processingEnv, roundEnv, endpointClassElement.getQualifiedName().toString());
         if (typeElement != null) {
             String doc = elementUtils.getDocComment(typeElement);
             if (doc != null) {
@@ -519,6 +602,7 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
 
                 String required = metadata != null ? metadata.required() : null;
                 String label = metadata != null ? metadata.label() : null;
+                boolean secret = metadata != null && metadata.secret();
 
                 // we do not yet have default values / notes / as no annotation support yet
                 // String defaultValueNote = param.defaultValueNote();
@@ -530,7 +614,7 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
                 name = prefix + name;
                 TypeMirror fieldType = setter.getParameters().get(0).asType();
                 String fieldTypeName = fieldType.toString();
-                TypeElement fieldTypeElement = findTypeElement(roundEnv, fieldTypeName);
+                TypeElement fieldTypeElement = findTypeElement(processingEnv, roundEnv, fieldTypeName);
 
                 String docComment = findJavaDoc(elementUtils, method, fieldName, name, classElement, false);
                 if (isNullOrEmpty(docComment)) {
@@ -547,22 +631,34 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
 
                 // gather enums
                 Set<String> enums = new LinkedHashSet<String>();
-                boolean isEnum = fieldTypeElement != null && fieldTypeElement.getKind() == ElementKind.ENUM;
-                if (isEnum) {
-                    TypeElement enumClass = findTypeElement(roundEnv, fieldTypeElement.asType().toString());
-                    // find all the enum constants which has the possible enum value that can be used
-                    List<VariableElement> fields = ElementFilter.fieldsIn(enumClass.getEnclosedElements());
-                    for (VariableElement var : fields) {
-                        if (var.getKind() == ElementKind.ENUM_CONSTANT) {
-                            String val = var.toString();
-                            enums.add(val);
+
+                boolean isEnum;
+                if (metadata != null && !Strings.isNullOrEmpty(metadata.enums())) {
+                    isEnum = true;
+                    String[] values = metadata.enums().split(",");
+                    for (String val : values) {
+                        enums.add(val);
+                    }
+                } else {
+                    isEnum = fieldTypeElement != null && fieldTypeElement.getKind() == ElementKind.ENUM;
+                    if (isEnum) {
+                        TypeElement enumClass = findTypeElement(processingEnv, roundEnv, fieldTypeElement.asType().toString());
+                        if (enumClass != null) {
+                            // find all the enum constants which has the possible enum value that can be used
+                            List<VariableElement> fields = ElementFilter.fieldsIn(enumClass.getEnclosedElements());
+                            for (VariableElement var : fields) {
+                                if (var.getKind() == ElementKind.ENUM_CONSTANT) {
+                                    String val = var.toString();
+                                    enums.add(val);
+                                }
+                            }
                         }
                     }
                 }
 
                 String group = EndpointHelper.labelAsGroupName(label, componentModel.isConsumerOnly(), componentModel.isProducerOnly());
                 ComponentOption option = new ComponentOption(name, fieldTypeName, required, defaultValue, defaultValueNote,
-                        docComment.trim(), deprecated, group, label, isEnum, enums);
+                        docComment.trim(), deprecated, secret, group, label, isEnum, enums);
                 componentOptions.add(option);
             }
 
@@ -571,7 +667,7 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
             TypeMirror superclass = classElement.getSuperclass();
             if (superclass != null) {
                 String superClassName = canonicalClassName(superclass.toString());
-                baseTypeElement = findTypeElement(roundEnv, superClassName);
+                baseTypeElement = findTypeElement(processingEnv, roundEnv, superClassName);
             }
             if (baseTypeElement != null) {
                 classElement = baseTypeElement;
@@ -583,7 +679,7 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
 
     protected void findClassProperties(PrintWriter writer, RoundEnvironment roundEnv, ComponentModel componentModel,
                                        Set<EndpointPath> endpointPaths, Set<EndpointOption> endpointOptions,
-                                       TypeElement classElement, String prefix) {
+                                       TypeElement classElement, String prefix, String excludeProperties) {
         Elements elementUtils = processingEnv.getElementUtils();
         while (true) {
             List<VariableElement> fieldElements = ElementFilter.fieldsIn(classElement.getEnclosedElements());
@@ -591,6 +687,7 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
 
                 Metadata metadata = fieldElement.getAnnotation(Metadata.class);
                 boolean deprecated = fieldElement.getAnnotation(Deprecated.class) != null;
+                Boolean secret = metadata != null ? metadata.secret() : null;
 
                 UriPath path = fieldElement.getAnnotation(UriPath.class);
                 String fieldName = fieldElement.getSimpleName().toString();
@@ -601,8 +698,13 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
                     }
                     name = prefix + name;
 
+                    // should we exclude the name?
+                    if (excludeProperty(excludeProperties, name)) {
+                        continue;
+                    }
+
                     String defaultValue = path.defaultValue();
-                    if (defaultValue == null && metadata != null) {
+                    if (Strings.isNullOrEmpty(defaultValue) && metadata != null) {
                         defaultValue = metadata.defaultValue();
                     }
                     String defaultValueNote = path.defaultValueNote();
@@ -614,7 +716,7 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
 
                     TypeMirror fieldType = fieldElement.asType();
                     String fieldTypeName = fieldType.toString();
-                    TypeElement fieldTypeElement = findTypeElement(roundEnv, fieldTypeName);
+                    TypeElement fieldTypeElement = findTypeElement(processingEnv, roundEnv, fieldTypeName);
 
                     String docComment = findJavaDoc(elementUtils, fieldElement, fieldName, name, classElement, false);
                     if (isNullOrEmpty(docComment)) {
@@ -634,20 +736,28 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
                     } else {
                         isEnum = fieldTypeElement != null && fieldTypeElement.getKind() == ElementKind.ENUM;
                         if (isEnum) {
-                            TypeElement enumClass = findTypeElement(roundEnv, fieldTypeElement.asType().toString());
+                            TypeElement enumClass = findTypeElement(processingEnv, roundEnv, fieldTypeElement.asType().toString());
                             // find all the enum constants which has the possible enum value that can be used
-                            List<VariableElement> fields = ElementFilter.fieldsIn(enumClass.getEnclosedElements());
-                            for (VariableElement var : fields) {
-                                if (var.getKind() == ElementKind.ENUM_CONSTANT) {
-                                    String val = var.toString();
-                                    enums.add(val);
+                            if (enumClass != null) {
+                                List<VariableElement> fields = ElementFilter.fieldsIn(enumClass.getEnclosedElements());
+                                for (VariableElement var : fields) {
+                                    if (var.getKind() == ElementKind.ENUM_CONSTANT) {
+                                        String val = var.toString();
+                                        enums.add(val);
+                                    }
                                 }
                             }
                         }
                     }
 
+                    // the field type may be overloaded by another type
+                    if (!Strings.isNullOrEmpty(path.javaType())) {
+                        fieldTypeName = path.javaType();
+                    }
+
                     String group = EndpointHelper.labelAsGroupName(label, componentModel.isConsumerOnly(), componentModel.isProducerOnly());
-                    EndpointPath ep = new EndpointPath(name, fieldTypeName, required, defaultValue, docComment, deprecated, group, label, isEnum, enums);
+                    boolean isSecret = secret != null ? secret : false;
+                    EndpointPath ep = new EndpointPath(name, fieldTypeName, required, defaultValue, docComment, deprecated, isSecret, group, label, isEnum, enums);
                     endpointPaths.add(ep);
                 }
 
@@ -660,6 +770,14 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
                     }
                     name = prefix + name;
 
+                    // should we exclude the name?
+                    if (excludeProperty(excludeProperties, name)) {
+                        continue;
+                    }
+
+                    String paramOptionalPrefix = param.optionalPrefix();
+                    String paramPrefix = param.prefix();
+                    boolean multiValue = param.multiValue();
                     String defaultValue = param.defaultValue();
                     if (defaultValue == null && metadata != null) {
                         defaultValue = metadata.defaultValue();
@@ -674,7 +792,7 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
                     // if the field type is a nested parameter then iterate through its fields
                     TypeMirror fieldType = fieldElement.asType();
                     String fieldTypeName = fieldType.toString();
-                    TypeElement fieldTypeElement = findTypeElement(roundEnv, fieldTypeName);
+                    TypeElement fieldTypeElement = findTypeElement(processingEnv, roundEnv, fieldTypeName);
                     UriParams fieldParams = null;
                     if (fieldTypeElement != null) {
                         fieldParams = fieldTypeElement.getAnnotation(UriParams.class);
@@ -685,11 +803,14 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
                         if (!isNullOrEmpty(extraPrefix)) {
                             nestedPrefix += extraPrefix;
                         }
-                        findClassProperties(writer, roundEnv, componentModel, endpointPaths, endpointOptions, fieldTypeElement, nestedPrefix);
+                        findClassProperties(writer, roundEnv, componentModel, endpointPaths, endpointOptions, fieldTypeElement, nestedPrefix, excludeProperties);
                     } else {
                         String docComment = findJavaDoc(elementUtils, fieldElement, fieldName, name, classElement, false);
                         if (isNullOrEmpty(docComment)) {
                             docComment = param.description();
+                        }
+                        if (isNullOrEmpty(docComment)) {
+                            docComment = "";
                         }
 
                         // gather enums
@@ -705,22 +826,29 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
                         } else {
                             isEnum = fieldTypeElement != null && fieldTypeElement.getKind() == ElementKind.ENUM;
                             if (isEnum) {
-                                TypeElement enumClass = findTypeElement(roundEnv, fieldTypeElement.asType().toString());
-                                // find all the enum constants which has the possible enum value that can be used
-                                List<VariableElement> fields = ElementFilter.fieldsIn(enumClass.getEnclosedElements());
-                                for (VariableElement var : fields) {
-                                    if (var.getKind() == ElementKind.ENUM_CONSTANT) {
-                                        String val = var.toString();
-                                        enums.add(val);
+                                TypeElement enumClass = findTypeElement(processingEnv, roundEnv, fieldTypeElement.asType().toString());
+                                if (enumClass != null) {
+                                    // find all the enum constants which has the possible enum value that can be used
+                                    List<VariableElement> fields = ElementFilter.fieldsIn(enumClass.getEnclosedElements());
+                                    for (VariableElement var : fields) {
+                                        if (var.getKind() == ElementKind.ENUM_CONSTANT) {
+                                            String val = var.toString();
+                                            enums.add(val);
+                                        }
                                     }
                                 }
                             }
                         }
 
+                        // the field type may be overloaded by another type
+                        if (!Strings.isNullOrEmpty(param.javaType())) {
+                            fieldTypeName = param.javaType();
+                        }
 
+                        boolean isSecret = secret != null ? secret : param.secret();
                         String group = EndpointHelper.labelAsGroupName(label, componentModel.isConsumerOnly(), componentModel.isProducerOnly());
                         EndpointOption option = new EndpointOption(name, fieldTypeName, required, defaultValue, defaultValueNote,
-                                docComment.trim(), deprecated, group, label, isEnum, enums);
+                                docComment.trim(), paramOptionalPrefix, paramPrefix, multiValue, deprecated, isSecret, group, label, isEnum, enums);
                         endpointOptions.add(option);
                     }
                 }
@@ -731,7 +859,7 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
             TypeMirror superclass = classElement.getSuperclass();
             if (superclass != null) {
                 String superClassName = canonicalClassName(superclass.toString());
-                baseTypeElement = findTypeElement(roundEnv, superClassName);
+                baseTypeElement = findTypeElement(processingEnv, roundEnv, superClassName);
             }
             if (baseTypeElement != null) {
                 classElement = baseTypeElement;
@@ -741,18 +869,45 @@ public class EndpointAnnotationProcessor extends AbstractAnnotationProcessor {
         }
     }
 
-    protected Map<String, String> parseAsMap(String data) {
+    private static boolean excludeProperty(String excludeProperties, String name) {
+        String[] excludes = excludeProperties.split(",");
+        for (String exclude : excludes) {
+            if (name.equals(exclude)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Map<String, String> parseAsMap(String data) {
         Map<String, String> answer = new HashMap<String, String>();
         String[] lines = data.split("\n");
         for (String line : lines) {
-            int idx = line.indexOf('=');
-            String key = line.substring(0, idx);
-            String value = line.substring(idx + 1);
-            // remove ending line break for the values
-            value = value.trim().replaceAll("\n", "");
-            answer.put(key.trim(), value);
+            if (!line.isEmpty()) {
+                int idx = line.indexOf('=');
+                String key = line.substring(0, idx);
+                String value = line.substring(idx + 1);
+                // remove ending line break for the values
+                value = value.trim().replaceAll("\n", "");
+                answer.put(key.trim(), value);
+            }
         }
         return answer;
     }
+
+    private static boolean secureAlias(String scheme, String alias) {
+        if (scheme.equals(alias)) {
+            return false;
+        }
+
+        // if alias is like scheme but with ending s its secured
+        if ((scheme + "s").equals(alias)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    // CHECKSTYLE:ON
 
 }

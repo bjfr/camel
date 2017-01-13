@@ -16,31 +16,36 @@
  */
 package org.apache.camel.component.kubernetes.consumer;
 
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
 
+import io.fabric8.kubernetes.api.model.DoneablePod;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.Watcher;
+import io.fabric8.kubernetes.client.dsl.ClientMixedOperation;
+import io.fabric8.kubernetes.client.dsl.ClientPodResource;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.component.kubernetes.KubernetesConstants;
 import org.apache.camel.component.kubernetes.KubernetesEndpoint;
 import org.apache.camel.component.kubernetes.consumer.common.PodEvent;
-import org.apache.camel.impl.ScheduledPollConsumer;
+import org.apache.camel.impl.DefaultConsumer;
 import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class KubernetesPodsConsumer extends ScheduledPollConsumer {
+public class KubernetesPodsConsumer extends DefaultConsumer {
 
     private static final Logger LOG = LoggerFactory.getLogger(KubernetesPodsConsumer.class);
 
-    private ConcurrentMap<Long, PodEvent> map;
+    private final Processor processor;
+    private ExecutorService executor;
 
     public KubernetesPodsConsumer(KubernetesEndpoint endpoint, Processor processor) {
         super(endpoint, processor);
+        this.processor = processor;
     }
 
     @Override
@@ -51,68 +56,66 @@ public class KubernetesPodsConsumer extends ScheduledPollConsumer {
     @Override
     protected void doStart() throws Exception {
         super.doStart();
-        map = new ConcurrentHashMap<Long, PodEvent>();
+        executor = getEndpoint().createExecutor();
 
-        if (ObjectHelper.isNotEmpty(getEndpoint().getKubernetesConfiguration().getOauthToken())) {
-            if (ObjectHelper.isNotEmpty(getEndpoint().getKubernetesConfiguration().getNamespaceName())) {
-                getEndpoint().getKubernetesClient().pods()
-                        .inNamespace(getEndpoint().getKubernetesConfiguration().getNamespaceName())
-                        .watch(new Watcher<Pod>() {
-
-                            @Override
-                            public void eventReceived(io.fabric8.kubernetes.client.Watcher.Action action,
-                                    Pod resource) {
-                                PodEvent pe = new PodEvent(action, resource);
-                                map.put(System.currentTimeMillis(), pe);
-                            }
-
-                            @Override
-                            public void onClose(KubernetesClientException cause) {
-                                if (cause != null) {
-                                    LOG.error(cause.getMessage(), cause);
-                                }
-
-                            }
-                        });
-            } else {
-                getEndpoint().getKubernetesClient().pods().watch(new Watcher<Pod>() {
-
-                    @Override
-                    public void eventReceived(io.fabric8.kubernetes.client.Watcher.Action action, Pod resource) {
-                        PodEvent pe = new PodEvent(action, resource);
-                        map.put(System.currentTimeMillis(), pe);
-                    }
-
-                    @Override
-                    public void onClose(KubernetesClientException cause) {
-                        if (cause != null) {
-                            LOG.error(cause.getMessage(), cause);
-                        }
-                    }
-                });
-            }
-        }
+        executor.submit(new PodsConsumerTask());
     }
 
     @Override
     protected void doStop() throws Exception {
         super.doStop();
-        map.clear();
-    }
 
-    @Override
-    protected int poll() throws Exception {
-        int mapSize = map.size();
-        for (ConcurrentMap.Entry<Long, PodEvent> entry : map.entrySet()) {
-            PodEvent podEvent = entry.getValue();
-            Exchange e = getEndpoint().createExchange();
-            e.getIn().setBody(podEvent.getPod());
-            e.getIn().setHeader(KubernetesConstants.KUBERNETES_EVENT_ACTION, podEvent.getAction());
-            e.getIn().setHeader(KubernetesConstants.KUBERNETES_EVENT_TIMESTAMP, entry.getKey());
-            getProcessor().process(e);
-            map.remove(entry.getKey());
+        LOG.debug("Stopping Kubernetes Pods Consumer");
+        if (executor != null) {
+            if (getEndpoint() != null && getEndpoint().getCamelContext() != null) {
+                getEndpoint().getCamelContext().getExecutorServiceManager().shutdownNow(executor);
+            } else {
+                executor.shutdownNow();
+            }
         }
-        return mapSize;
+        executor = null;
     }
 
+    class PodsConsumerTask implements Runnable {
+        
+        @Override
+        public void run() {
+            ClientMixedOperation<Pod, PodList, DoneablePod, ClientPodResource<Pod, DoneablePod>> w = getEndpoint().getKubernetesClient().pods();
+            if (ObjectHelper.isNotEmpty(getEndpoint().getKubernetesConfiguration().getNamespace())) {
+                w.inNamespace(getEndpoint().getKubernetesConfiguration().getNamespace());
+            }
+            if (ObjectHelper.isNotEmpty(getEndpoint().getKubernetesConfiguration().getLabelKey()) 
+                && ObjectHelper.isNotEmpty(getEndpoint().getKubernetesConfiguration().getLabelValue())) {
+                w.withLabel(getEndpoint().getKubernetesConfiguration().getLabelKey(), getEndpoint().getKubernetesConfiguration().getLabelValue());
+            }
+            if (ObjectHelper.isNotEmpty(getEndpoint().getKubernetesConfiguration().getResourceName())) {
+                w.withName(getEndpoint().getKubernetesConfiguration().getResourceName());
+            }
+            w.watch(new Watcher<Pod>() {
+
+                @Override
+                public void eventReceived(io.fabric8.kubernetes.client.Watcher.Action action,
+                    Pod resource) {
+                    PodEvent pe = new PodEvent(action, resource);
+                    Exchange exchange = getEndpoint().createExchange();
+                    exchange.getIn().setBody(pe.getPod());
+                    exchange.getIn().setHeader(KubernetesConstants.KUBERNETES_EVENT_ACTION, pe.getAction());
+                    exchange.getIn().setHeader(KubernetesConstants.KUBERNETES_EVENT_TIMESTAMP, System.currentTimeMillis());
+                    try {
+                        processor.process(exchange);
+                    } catch (Exception e) {
+                        getExceptionHandler().handleException("Error during processing", exchange, e);
+                    }
+                }
+
+                @Override
+                public void onClose(KubernetesClientException cause) {
+                    if (cause != null) {
+                        LOG.error(cause.getMessage(), cause);
+                    }
+
+                }
+            });
+        } 
+    }
 }

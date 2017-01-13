@@ -26,6 +26,7 @@ import org.apache.camel.ProducerTemplate;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.impl.DefaultComponentResolver;
 import org.apache.camel.spi.ComponentResolver;
+import org.apache.camel.test.AvailablePortFinder;
 import org.apache.camel.test.blueprint.CamelBlueprintTestSupport;
 import org.apache.camel.test.junit.rule.mllp.MllpServerResource;
 import org.apache.camel.util.KeyValueHolder;
@@ -36,14 +37,14 @@ import static org.apache.camel.test.mllp.Hl7MessageGenerator.generateMessage;
 
 public class MllpTcpClientProducerBlueprintTest extends CamelBlueprintTestSupport {
     @Rule
-    public MllpServerResource mllpServer = new MllpServerResource();
+    public MllpServerResource mllpServer = new MllpServerResource("localhost", AvailablePortFinder.getNextAvailable());
 
     final String sourceUri = "direct://source";
     final String mockAcknowledgedUri = "mock://acknowledged";
-    final String mockTimeoutUri = "mock://timeout-ex";
+    final String mockTimeoutUri = "mock://timeoutError-ex";
     final String mockAeExUri = "mock://ae-ack";
     final String mockArExUri = "mock://ar-ack";
-    final String mockFrameExUri = "mock://frame-ex";
+    final String mockFrameExUri = "mock://frameError-ex";
 
     @EndpointInject(uri = sourceUri)
     ProducerTemplate source;
@@ -100,11 +101,11 @@ public class MllpTcpClientProducerBlueprintTest extends CamelBlueprintTestSuppor
     @Test()
     public void testSendMultipleMessages() throws Exception {
         int messageCount = 500;
-        acknowledged.setExpectedMessageCount(messageCount);
-        timeout.setExpectedMessageCount(0);
-        frame.setExpectedMessageCount(0);
-        ae.setExpectedMessageCount(0);
-        ar.setExpectedMessageCount(0);
+        acknowledged.expectedMessageCount(messageCount);
+        timeout.expectedMessageCount(0);
+        frame.expectedMessageCount(0);
+        ae.expectedMessageCount(0);
+        ar.expectedMessageCount(0);
 
         // Uncomment one of these lines to see the NACKs handled
         // mllpServer.setSendApplicationRejectAcknowledgementModulus(10);

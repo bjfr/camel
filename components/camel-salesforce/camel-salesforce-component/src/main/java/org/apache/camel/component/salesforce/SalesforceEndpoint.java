@@ -37,9 +37,9 @@ public class SalesforceEndpoint extends DefaultEndpoint {
 
     private static final Logger LOG = LoggerFactory.getLogger(SalesforceEndpoint.class);
 
-    @UriPath
+    @UriPath(label = "producer", description = "The operation to use")
     private final OperationName operationName;
-    @UriPath
+    @UriPath(label = "consumer", description = "The name of the topic to use")
     private final String topicName;
     @UriParam
     private final SalesforceEndpointConfig config;
@@ -75,7 +75,7 @@ public class SalesforceEndpoint extends DefaultEndpoint {
         }
 
         final SalesforceConsumer consumer = new SalesforceConsumer(this, processor,
-            getComponent().getSubscriptionHelper());
+            getComponent().getSubscriptionHelper(topicName));
         configureConsumer(consumer);
         return consumer;
     }

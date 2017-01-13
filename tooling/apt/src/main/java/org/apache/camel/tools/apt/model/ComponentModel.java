@@ -21,6 +21,7 @@ public final class ComponentModel {
     private String scheme;
     private String extendsScheme;
     private String syntax;
+    private String alternativeSyntax;
     private String javaType;
     private String title;
     private String description;
@@ -31,6 +32,8 @@ public final class ComponentModel {
     private boolean consumerOnly;
     private boolean producerOnly;
     private boolean deprecated;
+    private boolean lenientProperties;
+    private boolean async;
 
     public ComponentModel(String scheme) {
         this.scheme = scheme;
@@ -54,6 +57,14 @@ public final class ComponentModel {
 
     public void setSyntax(String syntax) {
         this.syntax = syntax;
+    }
+
+    public String getAlternativeSyntax() {
+        return alternativeSyntax;
+    }
+
+    public void setAlternativeSyntax(String alternativeSyntax) {
+        this.alternativeSyntax = alternativeSyntax;
     }
 
     public String getJavaType() {
@@ -134,5 +145,21 @@ public final class ComponentModel {
 
     public void setDeprecated(boolean deprecated) {
         this.deprecated = deprecated;
+    }
+
+    public boolean isLenientProperties() {
+        return lenientProperties;
+    }
+
+    public void setLenientProperties(boolean lenientProperties) {
+        this.lenientProperties = lenientProperties;
+    }
+
+    public boolean isAsync() {
+        return async;
+    }
+
+    public void setAsync(boolean async) {
+        this.async = async;
     }
 }

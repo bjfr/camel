@@ -132,7 +132,7 @@ public class SftpOperations implements RemoteFileOperations<ChannelSftp.LsEntry>
                         LOG.trace("Connecting ...");
                         channel.connect();
                     }
-                    LOG.info("Connected to " + configuration.remoteServerInformation());
+                    LOG.debug("Connected to " + configuration.remoteServerInformation());
                 }
 
                 // yes we could connect
@@ -161,7 +161,27 @@ public class SftpOperations implements RemoteFileOperations<ChannelSftp.LsEntry>
             }
         }
 
+        configureBulkRequests();
+        
         return true;
+    }
+
+    private void configureBulkRequests() {
+        try {
+            tryConfigureBulkRequests();
+        } catch (JSchException e) {
+            throw new GenericFileOperationFailedException("Failed to configure number of bulk requests", e);
+        }
+    }
+
+    private void tryConfigureBulkRequests() throws JSchException {
+        Integer bulkRequests = endpoint.getConfiguration().getBulkRequests();
+
+        if (bulkRequests != null) {
+            LOG.trace("configuring channel to use up to {} bulk request(s)", bulkRequests);
+
+            channel.setBulkRequests(bulkRequests);
+        }
     }
 
     protected Session createSession(final RemoteFileConfiguration configuration) throws JSchException {
@@ -255,6 +275,13 @@ public class SftpOperations implements RemoteFileOperations<ChannelSftp.LsEntry>
             LOG.debug("Using knownhosts information from byte array");
             jsch.setKnownHosts(new ByteArrayInputStream(sftpConfig.getKnownHosts()));
         }
+
+        String knownHostsFile = sftpConfig.getKnownHostsFile();
+        if (knownHostsFile == null && sftpConfig.isUseUserKnownHostsFile()) {
+            knownHostsFile = System.getProperty("user.home") + "/.ssh/known_hosts";
+            LOG.info("Known host file not configured, using user known host file: {}", knownHostsFile);
+        }
+        jsch.setKnownHosts(ObjectHelper.isEmpty(knownHostsFile) ? null : knownHostsFile);
 
         final Session session = jsch.getSession(configuration.getUsername(), configuration.getHost(), configuration.getPort());
 
@@ -997,7 +1024,7 @@ public class SftpOperations implements RemoteFileOperations<ChannelSftp.LsEntry>
     public synchronized boolean sendNoop() throws GenericFileOperationFailedException {
         if (isConnected()) {
             try {
-                session.sendIgnore();
+                session.sendKeepAliveMsg();
                 return true;
             } catch (Exception e) {
                 LOG.debug("SFTP session was closed. Ignoring this exception.", e);

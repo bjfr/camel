@@ -1,7 +1,7 @@
 # Camel Servlet REST and OSGi Blueprint example
 =============================================
 
-### Introduction 
+### Introduction
 This example shows how to use Servlet REST to define REST endpoints in Camel routes using the Rest DSL
 
 
@@ -14,24 +14,24 @@ You will need to compile this example first:
 ### run
 To install Apache Camel in Karaf you type in the shell (we use version ${project.version}):
 
-	features:chooseurl camel ${project.version}
-	features:install camel
+	feature:repo-add camel ${project.version}
+	feature:install camel
 
 First you need to install the following features in Karaf/ServiceMix with:
 
-	features:install camel-servlet
-	features:install camel-jackson
-	features:install war
+	feature:install camel-servlet
+	feature:install camel-jackson
+	feature:install war
 
 Then you can install the Camel example:
 
-	osgi:install -s mvn:org.apache.camel/camel-example-servlet-rest-blueprint/${project.version}
+	install -s mvn:org.apache.camel/camel-example-servlet-rest-blueprint/${project.version}
 
 And you can see the application running by tailing the logs
 
 	log:tail
 
-And you can use `ctrl + c` to stop tailing the log.
+And you can use <kbd>ctrl</kbd>+<kbd>c</kbd> to stop tailing the log.
 
 There is a user REST service that supports the following operations
 
@@ -57,10 +57,10 @@ From the command shell you can use curl to access the service as shown below:
 This example is implemented in XML DSL in the `src/main/resources/OSGI-INF/bluepring/camel.xml` file.
 
 
-### Forum, Help, etc 
+### Forum, Help, etc
 
-If you hit an problems please let us know on the Camel Forums <http://camel.apache.org/discussion-forums.html>
+If you hit an problems please let us know on the Camel Forums
+	<http://camel.apache.org/discussion-forums.html>
 
 Please help us make Apache Camel better - we appreciate any feedback you may
 have.  Enjoy!
-

@@ -47,8 +47,6 @@ public class SnmpEndpoint extends DefaultPollingEndpoint {
 
     private static final Logger LOG = LoggerFactory.getLogger(SnmpEndpoint.class);
 
-    private OIDList oids = new OIDList();
-
     private transient String address;
 
     @UriPath(description = "Hostname of the SNMP enabled device") @Metadata(required = "true")
@@ -69,22 +67,25 @@ public class SnmpEndpoint extends DefaultPollingEndpoint {
     private SnmpActionType type;
     @UriParam(label = "consumer", defaultValue = "60000")
     private long delay = 60000;
-    @UriParam(defaultValue = "" + SecurityLevel.AUTH_PRIV, enums = "1,2,3")
+    @UriParam(defaultValue = "" + SecurityLevel.AUTH_PRIV, enums = "1,2,3", label = "security")
     private int securityLevel = SecurityLevel.AUTH_PRIV;
-    @UriParam
+    @UriParam(label = "security", secret = true)
     private String securityName;
-    @UriParam(enums = "MD5,SHA1")
+    @UriParam(enums = "MD5,SHA1", label = "security")
     private String authenticationProtocol;
-    @UriParam
+    @UriParam(label = "security", secret = true)
     private String authenticationPassphrase;
-    @UriParam
+    @UriParam(label = "security", secret = true)
     private String privacyProtocol;
-    @UriParam
+    @UriParam(label = "security", secret = true)
     private String privacyPassphrase;
     @UriParam
     private String snmpContextName;
     @UriParam
     private String snmpContextEngineId;
+    @UriParam(javaType = "java.lang.String")
+    private OIDList oids = new OIDList();
+
     /**
      * creates a snmp endpoint
      *
@@ -110,7 +111,7 @@ public class SnmpEndpoint extends DefaultPollingEndpoint {
     }
 
     public Producer createProducer() throws Exception {
-        throw new UnsupportedOperationException("SnmpProducer is not implemented");
+        return new SnmpProducer(this);
     }
 
     public boolean isSingleton() {
@@ -385,6 +386,6 @@ public class SnmpEndpoint extends DefaultPollingEndpoint {
     @Override
     public String toString() {
         // only show address to avoid user and password details to be shown
-        return "SnmpEndpoint[" + address + "]";
+        return "snmp://" + address;
     }
 }

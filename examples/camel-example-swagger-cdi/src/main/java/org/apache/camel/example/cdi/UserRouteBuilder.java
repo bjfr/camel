@@ -32,9 +32,9 @@ public class UserRouteBuilder extends RouteBuilder {
     @Override
     public void configure() throws Exception {
 
-        // configure we want to use servlet as the component for the rest DSL
+        // configure we want to use undertow as the component for the rest DSL
         // and we enable json binding mode
-        restConfiguration().component("netty4-http")
+        restConfiguration().component("undertow")
             // use json binding mode so Camel automatic binds json <--> pojo
             .bindingMode(RestBindingMode.json)
             // and output using pretty print
@@ -52,14 +52,17 @@ public class UserRouteBuilder extends RouteBuilder {
             .consumes("application/json").produces("application/json")
 
             .get("/{id}").description("Find user by id").outType(User.class)
-                .param().name("id").type(path).description("The id of the user to get").dataType("int").endParam()
+                .param().name("id").type(path).description("The id of the user to get").dataType("integer").endParam()
+                .responseMessage().code(200).message("The user").endResponseMessage()
                 .to("bean:userService?method=getUser(${header.id})")
 
             .put().description("Updates or create a user").type(User.class)
                 .param().name("body").type(body).description("The user to update or create").endParam()
+                .responseMessage().code(200).message("User created or updated").endResponseMessage()
                 .to("bean:userService?method=updateUser")
 
             .get("/findAll").description("Find all users").outTypeList(User.class)
+                .responseMessage().code(200).message("All users").endResponseMessage()
                 .to("bean:userService?method=listUsers");
     }
 

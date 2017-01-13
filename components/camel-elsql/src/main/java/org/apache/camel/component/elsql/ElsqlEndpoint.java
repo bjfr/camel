@@ -19,6 +19,7 @@ package org.apache.camel.component.elsql;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+import javax.sql.DataSource;
 
 import com.opengamma.elsql.ElSql;
 import com.opengamma.elsql.ElSqlConfig;
@@ -45,7 +46,8 @@ import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 /**
  * The elsql component is an extension to the existing SQL Component that uses ElSql to define the SQL queries.
  */
-@UriEndpoint(scheme = "elsql", title = "ElSQL", syntax = "elsql:elsqlName:resourceUri", consumerClass = ElsqlConsumer.class, label = "database,sql")
+@UriEndpoint(scheme = "elsql", title = "ElSQL", syntax = "elsql:elsqlName:resourceUri", consumerClass = ElsqlConsumer.class,
+        label = "database,sql", excludeProperties = "batch") // batch is not supported
 public class ElsqlEndpoint extends DefaultSqlEndpoint {
 
     private static final Logger LOG = LoggerFactory.getLogger(ElsqlEndpoint.class);
@@ -59,15 +61,19 @@ public class ElsqlEndpoint extends DefaultSqlEndpoint {
     @UriPath
     private String resourceUri;
     @UriParam
-    private ElSqlDatabaseVendor databaseVendor;
+    private DataSource dataSource;
     @UriParam
+    private ElSqlDatabaseVendor databaseVendor;
+    @UriParam(label = "advanced")
     private ElSqlConfig elSqlConfig;
 
-    public ElsqlEndpoint(String uri, Component component, NamedParameterJdbcTemplate namedJdbcTemplate, String elsqlName, String resourceUri) {
+    public ElsqlEndpoint(String uri, Component component, NamedParameterJdbcTemplate namedJdbcTemplate, DataSource dataSource,
+                         String elsqlName, String resourceUri) {
         super(uri, component, null);
         this.elsqlName = elsqlName;
         this.resourceUri = resourceUri;
         this.namedJdbcTemplate = namedJdbcTemplate;
+        this.dataSource = dataSource;
     }
 
     @Override
@@ -94,7 +100,7 @@ public class ElsqlEndpoint extends DefaultSqlEndpoint {
 
     @Override
     public Producer createProducer() throws Exception {
-        ElsqlProducer result = new ElsqlProducer(this, elSql, elsqlName, namedJdbcTemplate);
+        ElsqlProducer result = new ElsqlProducer(this, elSql, elsqlName, namedJdbcTemplate, dataSource);
         return result;
     }
 
@@ -162,5 +168,16 @@ public class ElsqlEndpoint extends DefaultSqlEndpoint {
      */
     public void setResourceUri(String resourceUri) {
         this.resourceUri = resourceUri;
+    }
+
+    public DataSource getDataSource() {
+        return dataSource;
+    }
+
+    /**
+     * Sets the DataSource to use to communicate with the database.
+     */
+    public void setDataSource(DataSource dataSource) {
+        this.dataSource = dataSource;
     }
 }

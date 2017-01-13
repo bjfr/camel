@@ -23,34 +23,37 @@ import javax.jms.ConnectionFactory;
 import org.apache.camel.CamelException;
 import org.apache.camel.Endpoint;
 import org.apache.camel.ExchangePattern;
-import org.apache.camel.component.sjms.jms.ConnectionFactoryResource;
 import org.apache.camel.component.sjms.jms.ConnectionResource;
 import org.apache.camel.component.sjms.jms.DefaultJmsKeyFormatStrategy;
 import org.apache.camel.component.sjms.jms.DestinationCreationStrategy;
 import org.apache.camel.component.sjms.jms.JmsKeyFormatStrategy;
 import org.apache.camel.component.sjms.jms.MessageCreatedStrategy;
 import org.apache.camel.component.sjms.taskmanager.TimedTaskManager;
-import org.apache.camel.impl.UriEndpointComponent;
-import org.apache.camel.spi.HeaderFilterStrategy;
-import org.apache.camel.spi.HeaderFilterStrategyAware;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.camel.impl.HeaderFilterStrategyComponent;
+import org.apache.camel.spi.Metadata;
 
 /**
  * The <a href="http://camel.apache.org/sjms">Simple JMS</a> component.
  */
-public class SjmsComponent extends UriEndpointComponent implements HeaderFilterStrategyAware {
-    private static final Logger LOGGER = LoggerFactory.getLogger(SjmsComponent.class);
+public class SjmsComponent extends HeaderFilterStrategyComponent {
 
-    private ConnectionFactory connectionFactory;
-    private ConnectionResource connectionResource;
-    private HeaderFilterStrategy headerFilterStrategy = new SjmsHeaderFilterStrategy();
-    private JmsKeyFormatStrategy jmsKeyFormatStrategy = new DefaultJmsKeyFormatStrategy();
-    private Integer connectionCount = 1;
-    private TransactionCommitStrategy transactionCommitStrategy;
-    private TimedTaskManager timedTaskManager;
-    private DestinationCreationStrategy destinationCreationStrategy;
     private ExecutorService asyncStartStopExecutorService;
+
+    @Metadata(label = "advanced")
+    private ConnectionFactory connectionFactory;
+    @Metadata(label = "advanced")
+    private ConnectionResource connectionResource;
+    @Metadata(label = "advanced")
+    private JmsKeyFormatStrategy jmsKeyFormatStrategy = new DefaultJmsKeyFormatStrategy();
+    @Metadata(defaultValue = "1")
+    private Integer connectionCount = 1;
+    @Metadata(label = "transaction")
+    private TransactionCommitStrategy transactionCommitStrategy;
+    @Metadata(label = "advanced")
+    private TimedTaskManager timedTaskManager;
+    @Metadata(label = "advanced")
+    private DestinationCreationStrategy destinationCreationStrategy;
+    @Metadata(label = "advanced")
     private MessageCreatedStrategy messageCreatedStrategy;
 
     public SjmsComponent() {
@@ -71,8 +74,8 @@ public class SjmsComponent extends UriEndpointComponent implements HeaderFilterS
         if (destinationCreationStrategy != null) {
             endpoint.setDestinationCreationStrategy(destinationCreationStrategy);
         }
-        if (headerFilterStrategy != null) {
-            endpoint.setHeaderFilterStrategy(headerFilterStrategy);
+        if (getHeaderFilterStrategy() != null) {
+            endpoint.setHeaderFilterStrategy(getHeaderFilterStrategy());
         }
         if (messageCreatedStrategy != null) {
             endpoint.setMessageCreatedStrategy(messageCreatedStrategy);
@@ -105,31 +108,14 @@ public class SjmsComponent extends UriEndpointComponent implements HeaderFilterS
     @Override
     protected void doStart() throws Exception {
         super.doStart();
-
         timedTaskManager = new TimedTaskManager();
-
-        LOGGER.trace("Verify ConnectionResource");
-        if (getConnectionResource() == null) {
-            LOGGER.debug("No ConnectionResource provided. Initialize the ConnectionFactoryResource.");
-            // We always use a connection pool, even for a pool of 1
-            ConnectionFactoryResource connections = new ConnectionFactoryResource(getConnectionCount(), getConnectionFactory());
-            connections.fillPool();
-            setConnectionResource(connections);
-        } else if (getConnectionResource() instanceof ConnectionFactoryResource) {
-            ((ConnectionFactoryResource) getConnectionResource()).fillPool();
-        }
     }
 
     @Override
     protected void doStop() throws Exception {
         if (timedTaskManager != null) {
             timedTaskManager.cancelTasks();
-        }
-
-        if (getConnectionResource() != null) {
-            if (getConnectionResource() instanceof ConnectionFactoryResource) {
-                ((ConnectionFactoryResource) getConnectionResource()).drainPool();
-            }
+            timedTaskManager = null;
         }
         super.doStop();
     }
@@ -162,19 +148,6 @@ public class SjmsComponent extends UriEndpointComponent implements HeaderFilterS
 
     public ConnectionFactory getConnectionFactory() {
         return connectionFactory;
-    }
-
-    @Override
-    public HeaderFilterStrategy getHeaderFilterStrategy() {
-        return this.headerFilterStrategy;
-    }
-
-    /**
-     * To use a custom HeaderFilterStrategy to filter header to and from Camel message.
-     */
-    @Override
-    public void setHeaderFilterStrategy(HeaderFilterStrategy headerFilterStrategy) {
-        this.headerFilterStrategy = headerFilterStrategy;
     }
 
     /**

@@ -29,12 +29,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * The <a href="http://camel.apache.org/sql-component.html">SQL Component</a> is for working with databases using JDBC queries.
- *
- * @version 
+ * 
  */
 public class SqlComponent extends UriEndpointComponent {
+
     private DataSource dataSource;
-    @Metadata(defaultValue = "true")
+    @Metadata(label = "advanced", defaultValue = "true")
     private boolean usePlaceholder = true;
 
     public SqlComponent() {
@@ -77,9 +77,13 @@ public class SqlComponent extends UriEndpointComponent {
         String parameterPlaceholderSubstitute = getAndRemoveParameter(parameters, "placeholder", String.class, "#");
 
         JdbcTemplate jdbcTemplate = new JdbcTemplate(target);
-        IntrospectionSupport.setProperties(jdbcTemplate, parameters, "template.");
+        Map<String, Object> templateOptions = IntrospectionSupport.extractProperties(parameters, "template.");
+        IntrospectionSupport.setProperties(jdbcTemplate, templateOptions);
 
-        String query = remaining.replaceAll(parameterPlaceholderSubstitute, "?");
+        String query = remaining;
+        if (usePlaceholder) {
+            query = query.replaceAll(parameterPlaceholderSubstitute, "?");
+        }
 
         String onConsume = getAndRemoveParameter(parameters, "consumer.onConsume", String.class);
         if (onConsume == null) {
@@ -105,11 +109,13 @@ public class SqlComponent extends UriEndpointComponent {
 
         SqlEndpoint endpoint = new SqlEndpoint(uri, this, jdbcTemplate, query);
         endpoint.setPlaceholder(parameterPlaceholderSubstitute);
+        endpoint.setUsePlaceholder(isUsePlaceholder());
         endpoint.setOnConsume(onConsume);
         endpoint.setOnConsumeFailed(onConsumeFailed);
         endpoint.setOnConsumeBatchComplete(onConsumeBatchComplete);
         endpoint.setDataSource(ds);
         endpoint.setDataSourceRef(dataSourceRef);
+        endpoint.setTemplateOptions(templateOptions);
         return endpoint;
     }
 

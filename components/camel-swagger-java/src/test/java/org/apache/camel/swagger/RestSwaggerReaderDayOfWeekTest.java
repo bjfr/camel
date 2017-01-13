@@ -48,10 +48,12 @@ public class RestSwaggerReaderDayOfWeekTest extends CamelTestSupport {
 
                     .get("/week").description("Day of week")
                         .param().name("day").type(RestParamType.query).description("Day of week")
+                            .defaultValue("friday")
                             .dataType("string").allowableValues("monday", "tuesday", "wednesday", "thursday", "friday")
                         .endParam()
                         .responseMessage()
                             .code(200).responseModel(DayResponse.class)
+                            .header("X-Rate-Limit-Limit").description("The number of allowed requests in the current period").dataType("integer").endHeader()
                         .endResponseMessage()
                         .to("log:week");
             }
@@ -80,9 +82,12 @@ public class RestSwaggerReaderDayOfWeekTest extends CamelTestSupport {
         log.info(json);
 
         assertTrue(json.contains("\"host\" : \"localhost:8080\""));
+        assertTrue(json.contains("\"default\" : \"friday\""));
         assertTrue(json.contains("\"enum\" : [ \"monday\", \"tuesday\", \"wednesday\", \"thursday\", \"friday\" ]"));
         assertTrue(json.contains("\"$ref\" : \"#/definitions/DayResponse\""));
         assertTrue(json.contains("\"format\" : \"org.apache.camel.swagger.DayResponse\""));
+        assertTrue(json.contains("\"X-Rate-Limit-Limit\" : {"));
+        assertTrue(json.contains("\"description\" : \"The number of allowed requests in the current period\""));
 
         context.stop();
     }

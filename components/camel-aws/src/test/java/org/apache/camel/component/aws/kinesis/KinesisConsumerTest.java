@@ -44,6 +44,7 @@ import org.mockito.runners.MockitoJUnitRunner;
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -101,6 +102,44 @@ public class KinesisConsumerTest {
     }
 
     @Test
+    public void itDoesNotMakeADescribeStreamRequestIfShardIdIsSet() throws Exception {
+        undertest.getEndpoint().setShardId("shardIdPassedAsUrlParam");
+
+        undertest.poll();
+
+        verify(kinesisClient, never()).describeStream(any(DescribeStreamRequest.class));
+
+        final ArgumentCaptor<GetShardIteratorRequest> getShardIteratorReqCap = ArgumentCaptor.forClass(GetShardIteratorRequest.class);
+
+        verify(kinesisClient).getShardIterator(getShardIteratorReqCap.capture());
+        assertThat(getShardIteratorReqCap.getValue().getStreamName(), is("streamName"));
+        assertThat(getShardIteratorReqCap.getValue().getShardId(), is("shardIdPassedAsUrlParam"));
+        assertThat(getShardIteratorReqCap.getValue().getShardIteratorType(), is("LATEST"));
+    }
+
+    @Test
+    public void itObtainsAShardIteratorOnFirstPollForSequenceNumber() throws Exception {
+        undertest.getEndpoint().setSequenceNumber("12345");
+        undertest.getEndpoint().setIteratorType(ShardIteratorType.AFTER_SEQUENCE_NUMBER);
+
+        undertest.poll();
+
+        final ArgumentCaptor<DescribeStreamRequest> describeStreamReqCap = ArgumentCaptor.forClass(DescribeStreamRequest.class);
+        final ArgumentCaptor<GetShardIteratorRequest> getShardIteratorReqCap = ArgumentCaptor.forClass(GetShardIteratorRequest.class);
+
+        verify(kinesisClient).describeStream(describeStreamReqCap.capture());
+        assertThat(describeStreamReqCap.getValue().getStreamName(), is("streamName"));
+
+        verify(kinesisClient).getShardIterator(getShardIteratorReqCap.capture());
+        assertThat(getShardIteratorReqCap.getValue().getStreamName(), is("streamName"));
+        assertThat(getShardIteratorReqCap.getValue().getShardId(), is("shardId"));
+        assertThat(getShardIteratorReqCap.getValue().getShardIteratorType(), is("AFTER_SEQUENCE_NUMBER"));
+        assertThat(getShardIteratorReqCap.getValue().getStartingSequenceNumber(), is("12345"));
+
+    }
+
+
+    @Test
     public void itUsesTheShardIteratorOnPolls() throws Exception {
         undertest.poll();
 
@@ -144,13 +183,15 @@ public class KinesisConsumerTest {
 
     @Test
     public void exchangePropertiesAreSet() throws Exception {
+        String partitionKey = "partitionKey";
+        String sequenceNumber = "1";
         when(kinesisClient.getRecords(any(GetRecordsRequest.class)))
             .thenReturn(new GetRecordsResult()
                 .withNextShardIterator("nextShardIterator")
                 .withRecords(new Record()
-                    .withSequenceNumber("1")
+                    .withSequenceNumber(sequenceNumber)
                     .withApproximateArrivalTimestamp(new Date(42))
-                    .withPartitionKey("shardId")
+                    .withPartitionKey(partitionKey)
                 )
             );
 
@@ -160,9 +201,8 @@ public class KinesisConsumerTest {
 
         verify(processor).process(exchangeCaptor.capture(), any(AsyncCallback.class));
         assertThat(exchangeCaptor.getValue().getIn().getHeader(KinesisConstants.APPROX_ARRIVAL_TIME, long.class), is(42L));
-        assertThat(exchangeCaptor.getValue().getIn().getHeader(KinesisConstants.PARTITION_KEY, String.class), is("shardId"));
-        assertThat(exchangeCaptor.getValue().getIn().getHeader(KinesisConstants.SEQUENCE_NUMBER, String.class), is("1"));
-        assertThat(exchangeCaptor.getValue().getIn().getHeader(KinesisConstants.SHARD_ID, String.class), is("shardId"));
+        assertThat(exchangeCaptor.getValue().getIn().getHeader(KinesisConstants.PARTITION_KEY, String.class), is(partitionKey));
+        assertThat(exchangeCaptor.getValue().getIn().getHeader(KinesisConstants.SEQUENCE_NUMBER, String.class), is(sequenceNumber));
     }
 
 }

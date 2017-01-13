@@ -26,7 +26,7 @@ To run the example with Maven, type
 You can see the BAM activies defined in
   `src/main/java/org/apache/camel/example/bam/MyActivites.java`
 
-To stop the example hit `ctrl + c`
+To stop the example hit <kbd>ctrl</kbd>+<kbd>c</kbd>
 
 ### Documentation
 
@@ -36,10 +36,11 @@ This example is documented at <http://camel.apache.org/bam-example.html>
 
 ### Forum, Help, etc
 
-If you hit an problems please let us know on the Camel Forums <http://camel.apache.org/discussion-forums.html>
+If you hit an problems please let us know on the Camel Forums
+	<http://camel.apache.org/discussion-forums.html>
 
 Please help us make Apache Camel better - we appreciate any feedback you may
 have.  Enjoy!
 
-------------------------
+
 The Camel riders!

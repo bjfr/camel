@@ -17,25 +17,25 @@ You will need to install this example first to your local maven repository with:
 ### Run with Karaf
 This example requires running in Apache Karaf / ServiceMix
 
-	karaf 
-	
-To install Apache Camel in Karaf you type in the shell (as an example here we make use of
-Camel version 2.12.0):
+	karaf
 
-	features:chooseurl camel 2.12.0
+To install Apache Camel in Karaf you type in the shell (as an example here we make use of
+Camel version 2.18.1):
+
+	feature:repo-add camel 2.18.1
 
 First you need to install the following features in Karaf/ServiceMix with:
 
-	features:install camel-blueprint
-	features:install camel-twitter
-	features:install camel-websocket
+  feature:install camel
+	feature:install camel-twitter
+	feature:install camel-websocket
 
 Then you can install the Camel example:
 
-	osgi:install -s mvn:org.apache.camel/camel-example-twitter-websocket-blueprint/2.12.0
+	install -s mvn:org.apache.camel/camel-example-twitter-websocket-blueprint/2.18.1
 
 Then open a browser to see live twitter updates in the web page
-	
+
 	http://localhost:9090
 <http://localhost:9090>
 To stop the example run from Karaf/ServiceMix shell:
@@ -51,13 +51,14 @@ This example is documented at <http://camel.apache.org/twitter-websocket-bluepri
 
 There is a regular (non OSGi Blueprint) example as well documented at: <http://camel.apache.org/twitter-websocket-example.html>
 
-### Forum, Help, etc 
+### Forum, Help, etc
 
-If you hit an problems please let us know on the Camel Forums <http://camel.apache.org/discussion-forums.html>
+If you hit an problems please let us know on the Camel Forums
+  <http://camel.apache.org/discussion-forums.html>
 
 Please help us make Apache Camel better - we appreciate any feedback you may
 have.  Enjoy!
 
 
-------------------------
+
 The Camel riders!

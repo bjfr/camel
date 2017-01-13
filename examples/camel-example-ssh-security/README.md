@@ -65,7 +65,7 @@ To test locally, assuming you have Setup Karaf and have it running, run the foll
 
     mvn camel:run
 
-To stop the example hit `ctrl + c`
+To stop the example hit <kbd>ctrl</kbd>+<kbd>c</kbd>
 
 ### Run with Karaf
 
@@ -78,22 +78,22 @@ the `<karaf_home>` directory.
 From the running Karaf console, run the following commands to install this example into your
 running Karaf server.
 
-    features:addurl mvn:org.apache.camel/camel-example-ssh-security/<camel version>/xml/features
-    features:install camel-example-ssh-security
+    feature:repo-add mvn:org.apache.camel/camel-example-ssh-security/<camel version>/xml/features
+    feature:install camel-example-ssh-security
 
 This example outputs into the Karaf log file so you can either `tail -f <karaf_home>data/log/karaf.log`
 or from the Karaf console run the following command
 
     log:tail
 
-### Forum, Help, etc 
+### Forum, Help, etc
 
-If you hit an problems please let us know on the Camel Forums <http://camel.apache.org/discussion-forums.html>
+If you hit an problems please let us know on the Camel Forums
+	<http://camel.apache.org/discussion-forums.html>
 
 Please help us make Apache Camel better - we appreciate any feedback you may
 have.  Enjoy!
 
 
-------------------------
-The Camel riders!
 
+The Camel riders!

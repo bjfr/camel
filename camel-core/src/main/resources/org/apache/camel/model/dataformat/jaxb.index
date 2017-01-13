@@ -26,12 +26,14 @@ CustomDataFormat
 DataFormatsDefinition
 FlatpackDataFormat
 GzipDataFormat
+HessianDataFormat
 HL7DataFormat
 IcalDataFormat
 JaxbDataFormat
 JibxDataFormat
 JsonDataFormat
 JsonLibrary
+LZFDataFormat
 MimeMultipartDataFormat
 ProtobufDataFormat
 RssDataFormat
@@ -39,6 +41,7 @@ SerializationDataFormat
 SoapJaxbDataFormat
 StringDataFormat
 SyslogDataFormat
+TarFileDataFormat
 TidyMarkupDataFormat
 UniVocityCsvDataFormat
 UniVocityFixedWidthDataFormat
@@ -47,5 +50,7 @@ UniVocityTsvDataFormat
 XMLBeansDataFormat
 XMLSecurityDataFormat
 XStreamDataFormat
+YAMLDataFormat
+YAMLLibrary
 ZipDataFormat
 ZipFileDataFormat

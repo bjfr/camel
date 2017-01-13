@@ -39,6 +39,7 @@ import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.UriEndpoint;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.spi.UriPath;
+import org.apache.camel.util.ExchangeHelper;
 import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.util.ResourceHelper;
@@ -52,7 +53,7 @@ public class FlatpackEndpoint extends DefaultPollingEndpoint {
     private LoadBalancer loadBalancer = new RoundRobinLoadBalancer();
     private ParserFactory parserFactory = DefaultParserFactory.getInstance();
 
-    @UriPath @Metadata(required = "true")
+    @UriPath @Metadata(required = "false", defaultValue = "delim")
     private FlatpackType type;
     @UriPath @Metadata(required = "true")
     private String resourceUri;
@@ -93,7 +94,7 @@ public class FlatpackEndpoint extends DefaultPollingEndpoint {
     }
 
     public void processDataSet(Exchange originalExchange, DataSet dataSet, int counter) throws Exception {
-        Exchange exchange = originalExchange.copy();
+        Exchange exchange = ExchangeHelper.createCorrelatedCopy(originalExchange, false);
         Message in = exchange.getIn();
         in.setBody(dataSet);
         in.setHeader("CamelFlatpackCounter", counter);

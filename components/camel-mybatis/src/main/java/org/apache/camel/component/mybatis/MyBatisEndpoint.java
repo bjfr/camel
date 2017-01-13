@@ -37,7 +37,6 @@ import org.apache.ibatis.session.SqlSessionFactory;
 @UriEndpoint(scheme = "mybatis", title = "MyBatis", syntax = "mybatis:statement", consumerClass =  MyBatisConsumer.class, label = "database,sql")
 public class MyBatisEndpoint extends DefaultPollingEndpoint {
 
-    private MyBatisProcessingStrategy processingStrategy = new DefaultMyBatisProcessingStrategy();
     @UriPath @Metadata(required = "true")
     private String statement;
     @UriParam(label = "producer")
@@ -51,6 +50,14 @@ public class MyBatisEndpoint extends DefaultPollingEndpoint {
     private String outputHeader;
     @UriParam(label = "consumer")
     private String inputHeader;
+    @UriParam(label = "consumer", optionalPrefix = "consumer.")
+    private String onConsume;
+    @UriParam(label = "consumer", optionalPrefix = "consumer.", defaultValue = "true")
+    private boolean useIterator = true;
+    @UriParam(label = "consumer", optionalPrefix = "consumer.")
+    private boolean routeEmptyResultSet;
+    @UriParam(label = "consumer,advanced")
+    private MyBatisProcessingStrategy processingStrategy = new DefaultMyBatisProcessingStrategy();
     @UriParam(label = "producer", defaultValue = "SIMPLE")
     private ExecutorType executorType;
 
@@ -72,6 +79,9 @@ public class MyBatisEndpoint extends DefaultPollingEndpoint {
         ObjectHelper.notNull(statement, "statement", this);
         MyBatisConsumer consumer = new MyBatisConsumer(this, processor);
         consumer.setMaxMessagesPerPoll(getMaxMessagesPerPoll());
+        consumer.setOnConsume(getOnConsume());
+        consumer.setUseIterator(isUseIterator());
+        consumer.setRouteEmptyResultSet(isRouteEmptyResultSet());
         configureConsumer(consumer);
         return consumer;
     }
@@ -147,6 +157,9 @@ public class MyBatisEndpoint extends DefaultPollingEndpoint {
         return processingStrategy;
     }
 
+    /**
+     * To use a custom MyBatisProcessingStrategy
+     */
     public void setProcessingStrategy(MyBatisProcessingStrategy processingStrategy) {
         this.processingStrategy = processingStrategy;
     }
@@ -196,6 +209,36 @@ public class MyBatisEndpoint extends DefaultPollingEndpoint {
         this.inputHeader = inputHeader;
     }
 
-    
-    
+    public String getOnConsume() {
+        return onConsume;
+    }
+
+    /**
+     * Statement to run after data has been processed in the route
+     */
+    public void setOnConsume(String onConsume) {
+        this.onConsume = onConsume;
+    }
+
+    public boolean isUseIterator() {
+        return useIterator;
+    }
+
+    /**
+     * Process resultset individually or as a list
+     */
+    public void setUseIterator(boolean useIterator) {
+        this.useIterator = useIterator;
+    }
+
+    public boolean isRouteEmptyResultSet() {
+        return routeEmptyResultSet;
+    }
+
+    /**
+     * Whether allow empty resultset to be routed to the next hop
+     */
+    public void setRouteEmptyResultSet(boolean routeEmptyResultSet) {
+        this.routeEmptyResultSet = routeEmptyResultSet;
+    }
 }

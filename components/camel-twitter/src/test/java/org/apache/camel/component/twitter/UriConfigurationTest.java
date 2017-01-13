@@ -58,7 +58,7 @@ public class UriConfigurationTest extends Assert {
         TwitterEndpoint twitterEndpoint = (TwitterEndpoint) endpoint;
         
         assertEquals("example.com", twitterEndpoint.getProperties().getHttpProxyHost());
-        assertEquals(3338, twitterEndpoint.getProperties().getHttpProxyPort());
+        assertEquals(Integer.valueOf(3338), twitterEndpoint.getProperties().getHttpProxyPort());
         assertEquals("test", twitterEndpoint.getProperties().getHttpProxyUser());
         assertEquals("pwd", twitterEndpoint.getProperties().getHttpProxyPassword());
     }
@@ -73,10 +73,6 @@ public class UriConfigurationTest extends Assert {
         ComponentConfiguration compConf = comp.createComponentConfiguration();
         String json = compConf.createParameterJsonSchema();
         assertNotNull(json);
-
-        // REVIST this comparison test may be sensitive to some changes.
-        assertTrue(json.contains("\"accessToken\": { \"kind\": \"parameter\", \"group\": \"common\", \"type\": \"string\""));
-        assertTrue(json.contains("\"consumerKey\": { \"kind\": \"parameter\", \"group\": \"common\", \"type\": \"string\""));
     }
 
     @Test

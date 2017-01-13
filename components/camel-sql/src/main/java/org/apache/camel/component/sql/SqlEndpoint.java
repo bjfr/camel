@@ -27,12 +27,13 @@ import org.apache.camel.util.UnsafeUriCharactersEncoder;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * The sql component can be used to perform SQL query to a database.
+ * The sql component allows you to work with databases using JDBC SQL queries.
  */
 @UriEndpoint(scheme = "sql", title = "SQL", syntax = "sql:query", consumerClass = SqlConsumer.class, label = "database,sql")
 public class SqlEndpoint extends DefaultSqlEndpoint {
 
-    @UriPath(description = "Sets the SQL query to perform") @Metadata(required = "true")
+    @UriPath(description = "Sets the SQL query to perform. You can externalize the query by using file: or classpath: as prefix and specify the location of the file.")
+    @Metadata(required = "true")
     private String query;
 
     public SqlEndpoint() {
@@ -61,7 +62,8 @@ public class SqlEndpoint extends DefaultSqlEndpoint {
 
     public Producer createProducer() throws Exception {
         SqlPrepareStatementStrategy prepareStrategy = getPrepareStatementStrategy() != null ? getPrepareStatementStrategy() : new DefaultSqlPrepareStatementStrategy(getSeparator());
-        SqlProducer result = new SqlProducer(this, query, getJdbcTemplate(), prepareStrategy, isBatch(), isAlwaysPopulateStatement(), isUseMessageBodyForSql());
+        SqlProducer result = new SqlProducer(this, query, getJdbcTemplate(), prepareStrategy, isBatch(),
+                isAlwaysPopulateStatement(), isUseMessageBodyForSql());
         result.setParametersCount(getParametersCount());
         return result;
     }
@@ -77,7 +79,7 @@ public class SqlEndpoint extends DefaultSqlEndpoint {
     }
 
     /**
-     * Sets the SQL query to perform
+     * Sets the SQL query to perform. You can externalize the query by using file: or classpath: as prefix and specify the location of the file.
      */
     public void setQuery(String query) {
         this.query = query;

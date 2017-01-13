@@ -16,6 +16,7 @@
  */
 package org.apache.camel.catalog;
 
+import java.io.FileInputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +32,7 @@ import static org.apache.camel.catalog.CatalogHelper.loadText;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class CamelCatalogTest {
@@ -48,6 +50,20 @@ public class CamelCatalogTest {
     public void testGetVersion() throws Exception {
         String version = catalog.getCatalogVersion();
         assertNotNull(version);
+
+        String loaded = catalog.getLoadedVersion();
+        assertNotNull(loaded);
+        assertEquals(version, loaded);
+    }
+
+    @Test
+    public void testLoadVersion() throws Exception {
+        boolean result = catalog.loadVersion("1.0");
+        assertFalse(result);
+
+        String version = catalog.getCatalogVersion();
+        result = catalog.loadVersion(version);
+        assertTrue(result);
     }
 
     @Test
@@ -58,6 +74,8 @@ public class CamelCatalogTest {
         assertTrue(names.contains("simple"));
         assertTrue(names.contains("spel"));
         assertTrue(names.contains("xpath"));
+        assertTrue(names.contains("bean"));
+        assertFalse(names.contains("method"));
     }
 
     @Test
@@ -104,6 +122,12 @@ public class CamelCatalogTest {
         assertNotNull(schema);
 
         schema = catalog.modelJSonSchema("aggregate");
+        assertNotNull(schema);
+
+        // lets make it possible to find bean/method using both names
+        schema = catalog.modelJSonSchema("method");
+        assertNotNull(schema);
+        schema = catalog.modelJSonSchema("bean");
         assertNotNull(schema);
     }
 
@@ -164,7 +188,8 @@ public class CamelCatalogTest {
     @Test
     public void testAsEndpointUriNetty4http() throws Exception {
         Map<String, String> map = new HashMap<String, String>();
-        // use default protocol
+        // use http protocol
+        map.put("protocol", "http");
         map.put("host", "localhost");
         map.put("port", "8080");
         map.put("path", "foo/bar");
@@ -173,7 +198,7 @@ public class CamelCatalogTest {
         String uri = catalog.asEndpointUri("netty4-http", map, true);
         assertEquals("netty4-http:http:localhost:8080/foo/bar?disconnect=true", uri);
 
-        // lets add a protocol
+        // lets switch protocol
         map.put("protocol", "https");
 
         uri = catalog.asEndpointUri("netty4-http", map, true);
@@ -342,6 +367,28 @@ public class CamelCatalogTest {
     }
 
     @Test
+    public void testAsEndpointUriLogShort() throws Exception {
+        Map<String, String> map = new HashMap<String, String>();
+        map.put("loggerName", "foo");
+        map.put("loggerLevel", "DEBUG");
+
+        assertEquals("log:foo?loggerLevel=DEBUG", catalog.asEndpointUri("log", map, false));
+    }
+
+    @Test
+    public void testAsEndpointUriWithplaceholder() throws Exception {
+        Map<String, String> map = new HashMap<String, String>();
+        map.put("query", "{{insert}}");
+        assertEquals("sql:{{insert}}", catalog.asEndpointUri("sql", map, false));
+
+        map.put("useMessageBodyForSql", "true");
+        assertEquals("sql:{{insert}}?useMessageBodyForSql=true", catalog.asEndpointUri("sql", map, false));
+
+        map.put("parametersCount", "{{count}}");
+        assertEquals("sql:{{insert}}?parametersCount={{count}}&useMessageBodyForSql=true", catalog.asEndpointUri("sql", map, false));
+    }
+
+    @Test
     public void testEndpointPropertiesJms() throws Exception {
         Map<String, String> map = catalog.endpointProperties("jms:queue:foo");
         assertNotNull(map);
@@ -355,6 +402,21 @@ public class CamelCatalogTest {
         assertEquals(1, map.size());
 
         assertEquals("foo", map.get("destinationName"));
+    }
+
+    @Test
+    public void testEndpointPropertiesJmsWithDotInName() throws Exception {
+        Map<String, String> map = catalog.endpointProperties("jms:browse.me");
+        assertNotNull(map);
+        assertEquals(1, map.size());
+
+        assertEquals("browse.me", map.get("destinationName"));
+
+        map = catalog.endpointProperties("jms:browse.me");
+        assertNotNull(map);
+        assertEquals(1, map.size());
+
+        assertEquals("browse.me", map.get("destinationName"));
     }
 
     @Test
@@ -392,6 +454,45 @@ public class CamelCatalogTest {
     }
 
     @Test
+    public void testEndpointPropertiesMultiValued() throws Exception {
+        Map<String, String> map = catalog.endpointProperties("http:helloworld?httpClientOptions=httpClient.foo=123&httpClient.bar=456");
+        assertNotNull(map);
+        assertEquals(2, map.size());
+
+        assertEquals("helloworld", map.get("httpUri"));
+        assertEquals("httpClient.foo=123&httpClient.bar=456", map.get("httpClientOptions"));
+    }
+
+    @Test
+    public void testEndpointPropertiesSshWithUserInfo() throws Exception {
+        Map<String, String> map = catalog.endpointProperties("ssh:localhost:8101?username=scott&password=tiger");
+        assertNotNull(map);
+        assertEquals(4, map.size());
+        assertEquals("8101", map.get("port"));
+        assertEquals("localhost", map.get("host"));
+        assertEquals("scott", map.get("username"));
+        assertEquals("tiger", map.get("password"));
+
+        map = catalog.endpointProperties("ssh://scott:tiger@localhost:8101");
+        assertNotNull(map);
+        assertEquals(4, map.size());
+        assertEquals("8101", map.get("port"));
+        assertEquals("localhost", map.get("host"));
+        assertEquals("scott", map.get("username"));
+        assertEquals("tiger", map.get("password"));
+    }
+
+    @Test
+    public void validateActiveMQProperties() throws Exception {
+        // add activemq as known component
+        catalog.addComponent("activemq", "org.apache.activemq.camel.component.ActiveMQComponent");
+
+        // activemq
+        EndpointValidationResult result = catalog.validateEndpointProperties("activemq:temp:queue:cheese");
+        assertTrue(result.isSuccess());
+    }
+
+    @Test
     public void validateProperties() throws Exception {
         // valid
         EndpointValidationResult result = catalog.validateEndpointProperties("log:mylog");
@@ -416,9 +517,9 @@ public class CamelCatalogTest {
         assertEquals(0, result.getNumberOfErrors());
 
         // reference
-        result = catalog.validateEndpointProperties("jms:queue:myqueue?jmsKeyFormatStrategy=key");
+        result = catalog.validateEndpointProperties("jms:queue:myqueue?jmsKeyFormatStrategy=foo");
         assertFalse(result.isSuccess());
-        assertEquals("key", result.getInvalidReference().get("jmsKeyFormatStrategy"));
+        assertEquals("foo", result.getInvalidEnum().get("jmsKeyFormatStrategy"));
         assertEquals(1, result.getNumberOfErrors());
 
         // okay
@@ -460,6 +561,75 @@ public class CamelCatalogTest {
         // dataset
         result = catalog.validateEndpointProperties("dataset:foo?minRate=50");
         assertTrue(result.isSuccess());
+
+        // time pattern
+        result = catalog.validateEndpointProperties("timer://foo?fixedRate=true&delay=0&period=2s");
+        assertTrue(result.isSuccess());
+
+        // reference lookup
+        result = catalog.validateEndpointProperties("timer://foo?fixedRate=#fixed&delay=#myDelay");
+        assertTrue(result.isSuccess());
+
+        // optional consumer. prefix
+        result = catalog.validateEndpointProperties("file:inbox?consumer.delay=5000&consumer.greedy=true");
+        assertTrue(result.isSuccess());
+
+        // optional without consumer. prefix
+        result = catalog.validateEndpointProperties("file:inbox?delay=5000&greedy=true");
+        assertTrue(result.isSuccess());
+
+        // mixed optional without consumer. prefix
+        result = catalog.validateEndpointProperties("file:inbox?delay=5000&consumer.greedy=true");
+        assertTrue(result.isSuccess());
+
+        // prefix
+        result = catalog.validateEndpointProperties("file:inbox?delay=5000&scheduler.foo=123&scheduler.bar=456");
+        assertTrue(result.isSuccess());
+
+        // stub
+        result = catalog.validateEndpointProperties("stub:foo?me=123&you=456");
+        assertTrue(result.isSuccess());
+
+        // lenient on
+        result = catalog.validateEndpointProperties("dataformat:string:marshal?foo=bar");
+        assertTrue(result.isSuccess());
+
+        // lenient off
+        result = catalog.validateEndpointProperties("dataformat:string:marshal?foo=bar", true);
+        assertFalse(result.isSuccess());
+        assertTrue(result.getUnknown().contains("foo"));
+
+        // data format
+        result = catalog.validateEndpointProperties("dataformat:string:marshal?charset=utf-8", true);
+        assertTrue(result.isSuccess());
+
+        // 2 slash after component name
+        result = catalog.validateEndpointProperties("atmos://put?remotePath=/dummy.txt");
+        assertTrue(result.isSuccess());
+
+        // userinfo in authority with username and password
+        result = catalog.validateEndpointProperties("ssh://karaf:karaf@localhost:8101");
+        assertTrue(result.isSuccess());
+
+        // userinfo in authority without password
+        result = catalog.validateEndpointProperties("ssh://scott@localhost:8101?certResource=classpath:test_rsa&useFixedDelay=true&delay=5000&pollCommand=features:list%0A");
+        assertTrue(result.isSuccess());
+
+        // userinfo with both user and password and placeholder
+        result = catalog.validateEndpointProperties("ssh://smx:smx@localhost:8181?timeout=3000");
+        assertTrue(result.isSuccess());
+        // and should also work when port is using a placeholder
+        result = catalog.validateEndpointProperties("ssh://smx:smx@localhost:{{port}}?timeout=3000");
+        assertTrue(result.isSuccess());
+
+        // placeholder for a bunch of optional options
+        result = catalog.validateEndpointProperties("aws-swf://activity?{{options}}");
+        assertTrue(result.isSuccess());
+
+        // incapable to parse
+        result = catalog.validateEndpointProperties("{{getFtpUrl}}?recursive=true");
+        assertFalse(result.isSuccess());
+        assertTrue(result.getIncapable() != null);
     }
 
     @Test
@@ -473,6 +643,27 @@ public class CamelCatalogTest {
         assertFalse(result.isSuccess());
         reason = result.summaryErrorMessage(false);
         LOG.info(reason);
+    }
+
+    @Test
+    public void validateTimePattern() throws Exception {
+        assertTrue(catalog.validateTimePattern("0"));
+        assertTrue(catalog.validateTimePattern("500"));
+        assertTrue(catalog.validateTimePattern("10000"));
+        assertTrue(catalog.validateTimePattern("5s"));
+        assertTrue(catalog.validateTimePattern("5sec"));
+        assertTrue(catalog.validateTimePattern("5secs"));
+        assertTrue(catalog.validateTimePattern("3m"));
+        assertTrue(catalog.validateTimePattern("3min"));
+        assertTrue(catalog.validateTimePattern("3minutes"));
+        assertTrue(catalog.validateTimePattern("5m15s"));
+        assertTrue(catalog.validateTimePattern("1h"));
+        assertTrue(catalog.validateTimePattern("1hour"));
+        assertTrue(catalog.validateTimePattern("2hours"));
+
+        assertFalse(catalog.validateTimePattern("bla"));
+        assertFalse(catalog.validateTimePattern("2year"));
+        assertFalse(catalog.validateTimePattern("60darn"));
     }
 
     @Test
@@ -538,8 +729,6 @@ public class CamelCatalogTest {
 
     @Test
     public void testAddComponent() throws Exception {
-        assertFalse(catalog.findComponentNames().contains("dummy"));
-
         catalog.addComponent("dummy", "org.foo.camel.DummyComponent");
 
         assertTrue(catalog.findComponentNames().contains("dummy"));
@@ -554,9 +743,24 @@ public class CamelCatalogTest {
     }
 
     @Test
-    public void testAddDataFormat() throws Exception {
-        assertFalse(catalog.findDataFormatNames().contains("dummyformat"));
+    public void testAddComponentWithJson() throws Exception {
+        String json = loadText(new FileInputStream("src/test/resources/org/foo/camel/dummy.json"));
+        assertNotNull(json);
+        catalog.addComponent("dummy", "org.foo.camel.DummyComponent", json);
 
+        assertTrue(catalog.findComponentNames().contains("dummy"));
+
+        json = catalog.componentJSonSchema("dummy");
+        assertNotNull(json);
+
+        // validate we can parse the json
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode tree = mapper.readTree(json);
+        assertNotNull(tree);
+    }
+
+    @Test
+    public void testAddDataFormat() throws Exception {
         catalog.addDataFormat("dummyformat", "org.foo.camel.DummyDataFormat");
 
         assertTrue(catalog.findDataFormatNames().contains("dummyformat"));
@@ -571,29 +775,160 @@ public class CamelCatalogTest {
     }
 
     @Test
+    public void testAddDataFormatWithJSon() throws Exception {
+        String json = loadText(new FileInputStream("src/test/resources/org/foo/camel/dummyformat.json"));
+        assertNotNull(json);
+        catalog.addDataFormat("dummyformat", "org.foo.camel.DummyDataFormat", json);
+
+        assertTrue(catalog.findDataFormatNames().contains("dummyformat"));
+
+        json = catalog.dataFormatJSonSchema("dummyformat");
+        assertNotNull(json);
+
+        // validate we can parse the json
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode tree = mapper.readTree(json);
+        assertNotNull(tree);
+    }
+
+    @Test
     public void testSimpleExpression() throws Exception {
-        SimpleValidationResult result = catalog.validateSimpleExpression("${body}");
+        SimpleValidationResult result = catalog.validateSimpleExpression(null, "${body}");
         assertTrue(result.isSuccess());
         assertEquals("${body}", result.getSimple());
 
-        result = catalog.validateSimpleExpression("${body");
+        result = catalog.validateSimpleExpression(null, "${body");
         assertFalse(result.isSuccess());
         assertEquals("${body", result.getSimple());
         LOG.info(result.getError());
         assertTrue(result.getError().startsWith("expected symbol functionEnd but was eol at location 5"));
+        assertEquals("expected symbol functionEnd but was eol", result.getShortError());
+        assertEquals(5, result.getIndex());
     }
 
     @Test
     public void testSimplePredicate() throws Exception {
-        SimpleValidationResult result = catalog.validateSimplePredicate("${body} == 'abc'");
+        SimpleValidationResult result = catalog.validateSimplePredicate(null, "${body} == 'abc'");
         assertTrue(result.isSuccess());
         assertEquals("${body} == 'abc'", result.getSimple());
 
-        result = catalog.validateSimplePredicate("${body} > ${header.size");
+        result = catalog.validateSimplePredicate(null, "${body} > ${header.size");
         assertFalse(result.isSuccess());
         assertEquals("${body} > ${header.size", result.getSimple());
         LOG.info(result.getError());
         assertTrue(result.getError().startsWith("expected symbol functionEnd but was eol at location 22"));
+        assertEquals("expected symbol functionEnd but was eol", result.getShortError());
+        assertEquals(22, result.getIndex());
+    }
+
+    @Test
+    public void testValidateLanguage() throws Exception {
+        LanguageValidationResult result = catalog.validateLanguageExpression(null, "simple", "${body}");
+        assertTrue(result.isSuccess());
+        assertEquals("${body}", result.getText());
+
+        result = catalog.validateLanguageExpression(null, "header", "foo");
+        assertTrue(result.isSuccess());
+        assertEquals("foo", result.getText());
+
+        result = catalog.validateLanguagePredicate(null, "simple", "${body} > 10");
+        assertTrue(result.isSuccess());
+        assertEquals("${body} > 10", result.getText());
+
+        result = catalog.validateLanguagePredicate(null, "header", "bar");
+        assertTrue(result.isSuccess());
+        assertEquals("bar", result.getText());
+
+        result = catalog.validateLanguagePredicate(null, "foobar", "bar");
+        assertFalse(result.isSuccess());
+        assertEquals("Unknown language foobar", result.getError());
+    }
+
+    @Test
+    public void testSpringCamelContext() throws Exception {
+        String json = catalog.modelJSonSchema("camelContext");
+        assertNotNull(json);
+
+        // validate we can parse the json
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode tree = mapper.readTree(json);
+        assertNotNull(tree);
+
+        assertTrue(json.contains("CamelContext using XML configuration"));
+    }
+
+    @Test
+    public void testComponentAsciiDoc() throws Exception {
+        String doc = catalog.componentAsciiDoc("mock");
+        assertNotNull(doc);
+        assertTrue(doc.contains("mock:someName"));
+
+        doc = catalog.componentAsciiDoc("geocoder");
+        assertNotNull(doc);
+        assertTrue(doc.contains("looking up geocodes"));
+
+        doc = catalog.componentAsciiDoc("smtp");
+        assertNotNull(doc);
+        assertTrue(doc.contains("The mail component"));
+
+        doc = catalog.componentAsciiDoc("unknown");
+        assertNull(doc);
+    }
+
+    @Test
+    public void testDataFormatAsciiDoc() throws Exception {
+        String doc = catalog.dataFormatAsciiDoc("json-jackson");
+        assertNotNull(doc);
+        assertTrue(doc.contains("Jackson dataformat"));
+
+        doc = catalog.dataFormatAsciiDoc("bindy-csv");
+        assertNotNull(doc);
+        assertTrue(doc.contains("CsvRecord"));
+    }
+
+    @Test
+    public void testLanguageAsciiDoc() throws Exception {
+        String doc = catalog.languageAsciiDoc("jsonpath");
+        assertNotNull(doc);
+        assertTrue(doc.contains("JSonPath language"));
+    }
+
+    @Test
+    public void testValidateEndpointTwitterSpecial() throws Exception {
+        String uri = "twitter://search?{{%s}}&keywords=java";
+
+        EndpointValidationResult result = catalog.validateEndpointProperties(uri);
+        assertTrue(result.isSuccess());
+
+        uri = "twitter://search?{{%s}}";
+        result = catalog.validateEndpointProperties(uri);
+        assertTrue(result.isSuccess());
+    }
+
+    @Test
+    public void testValidateEndpointConsumerOnly() throws Exception {
+        String uri = "file:inbox?bufferSize=4096&readLock=changed&delete=true";
+        EndpointValidationResult result = catalog.validateEndpointProperties(uri, false, true, false);
+        assertTrue(result.isSuccess());
+
+        uri = "file:inbox?bufferSize=4096&readLock=changed&delete=true&fileExist=Append";
+        result = catalog.validateEndpointProperties(uri, false, true, false);
+        assertFalse(result.isSuccess());
+
+        assertEquals("fileExist", result.getNotConsumerOnly().iterator().next());
+    }
+
+    @Test
+    public void testValidateEndpointProducerOnly() throws Exception {
+        String uri = "file:outbox?bufferSize=4096&fileExist=Append";
+        EndpointValidationResult result = catalog.validateEndpointProperties(uri, false, false, true);
+        assertTrue(result.isSuccess());
+
+        uri = "file:outbox?bufferSize=4096&fileExist=Append&delete=true";
+        result = catalog.validateEndpointProperties(uri, false, false, true);
+        assertFalse(result.isSuccess());
+
+        assertEquals("delete", result.getNotProducerOnly().iterator().next());
     }
 
 }

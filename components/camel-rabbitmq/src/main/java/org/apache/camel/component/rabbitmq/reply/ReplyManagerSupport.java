@@ -110,6 +110,15 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
 
     protected abstract ReplyHandler createReplyHandler(ReplyManager replyManager, Exchange exchange, AsyncCallback callback,
                                                        String originalCorrelationId, String correlationId, long requestTimeout);
+    
+
+    public void cancelCorrelationId(String correlationId) {
+        ReplyHandler handler = correlation.get(correlationId);
+        if (handler != null) {
+            log.warn("Cancelling correlationID: {}", correlationId);
+            correlation.remove(correlationId);
+        }
+    }
 
     public void onMessage(AMQP.BasicProperties properties, byte[] message) {
         String correlationID = properties.getCorrelationId();
@@ -148,7 +157,7 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
 
                     // restore correlation id in case the remote server messed with it
                     if (holder.getOriginalCorrelationId() != null) {
-                        if (exchange.getOut() != null) {
+                        if (exchange.hasOut()) {
                             exchange.getOut().setHeader(RabbitMQConstants.CORRELATIONID, holder.getOriginalCorrelationId());
                         } else {
                             exchange.getIn().setHeader(RabbitMQConstants.CORRELATIONID, holder.getOriginalCorrelationId());
@@ -221,8 +230,7 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
         correlation = new CorrelationTimeoutMap(executorService, endpoint.getRequestTimeoutCheckerInterval());
         ServiceHelper.startService(correlation);
 
-        // create JMS listener and start it
-        
+        // create listener and start it
         listenerContainer = createListenerContainer();
         
         log.debug("Using executor {}", executorService);

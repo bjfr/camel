@@ -21,12 +21,12 @@ import org.apache.camel.Processor;
 import org.apache.camel.impl.DefaultProducer;
 import org.apache.camel.spring.SpringCamelContext;
 import org.apache.camel.util.ObjectHelper;
+import org.springframework.integration.channel.DirectChannel;
+import org.springframework.integration.support.channel.BeanFactoryChannelResolver;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
-import org.springframework.messaging.MessageHeaders;
-import org.springframework.integration.channel.DirectChannel;
 import org.springframework.messaging.MessageHandler;
-import org.springframework.integration.support.channel.BeanFactoryChannelResolver;
+import org.springframework.messaging.MessageHeaders;
 import org.springframework.messaging.core.DestinationResolver;
 
 /**
@@ -90,7 +90,7 @@ public class SpringIntegrationProducer extends DefaultProducer implements Proces
             if (inputChannel == null) {
                 throw new IllegalArgumentException("InputChannel has not been configured on " + getEndpoint());
             }
-            exchange.getIn().getHeaders().put(MessageHeaders.REPLY_CHANNEL , inputChannel);
+            exchange.getIn().getHeaders().put(MessageHeaders.REPLY_CHANNEL, inputChannel);
 
             // subscribe so we can receive the reply from spring integration
             inputChannel.subscribe(new MessageHandler() {

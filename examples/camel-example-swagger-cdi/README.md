@@ -14,36 +14,40 @@ You will need to compile this example first:
 
 ### Run
 To run the example type
-  
+
 	mvn camel:run
 
 The rest service can be accessed from the following url
 
 	curl http://localhost:8080/user
-	
+
 <http://localhost:8080/user>
 
 For example to get a user with id 123
 
 	curl http://localhost:8080/user/123
-   
+
 <http://localhost:8080/user/123>
 
-The rest services provides Swagger API which can be accessed from the following url
+The rest services provides Swagger API in json or yaml format
+which can be accessed from the following url
 
-    curl http://localhost:8080/api-doc
-    
-<http://localhost:8080/api-doc>
+    curl http://localhost:8080/api-doc/swagger.json
+    curl http://localhost:8080/api-doc/swagger.yaml
 
-To stop the example hit `ctrl + c`
 
-### Forum, Help, etc 
+<http://localhost:8080/api-doc/swagger.json>
 
-If you hit an problems please let us know on the Camel Forums <http://camel.apache.org/discussion-forums.html>
+To stop the example hit <kbd>ctrl</kbd>+<kbd>c</kbd>
+
+### Forum, Help, etc
+
+If you hit an problems please let us know on the Camel Forums
+	<http://camel.apache.org/discussion-forums.html>
 
 Please help us make Apache Camel better - we appreciate any feedback you may
 have.  Enjoy!
 
 
-------------------------
+
 The Camel riders!

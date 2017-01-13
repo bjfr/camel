@@ -25,7 +25,7 @@ To run the client
 
 	mvn exec:java -PClient
 
-To stop the example hit `ctrl + c`
+To stop the example hit <kbd>ctrl</kbd>+<kbd>c</kbd>
 
 
 ### Run inside OSGi container
@@ -35,17 +35,18 @@ from the shell
 
 First the camel-rmi feature must be installed
 
-	features:chooseurl camel ${version}
-	features:install camel-rmi
+	feature:repo-add camel ${version}
+	feature:install camel-spring-dm
+	feature:install camel-rmi
 
 Then install the example
 
-	osgi:install -s mvn:org.apache.camel/camel-example-osgi-rmi/${version}
+	install -s mvn:org.apache.camel/camel-example-osgi-rmi/${version}
 
-### Forum, Help, etc 
+### Forum, Help, etc
 
-If you hit an problems please let us know on the Camel Forums <http://camel.apache.org/discussion-forums.html>
+If you hit an problems please let us know on the Camel Forums
+	<http://camel.apache.org/discussion-forums.html>
 
 Please help us make Apache Camel better - we appreciate any feedback you may
 have.  Enjoy!
-

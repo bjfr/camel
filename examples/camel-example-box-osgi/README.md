@@ -7,8 +7,8 @@ found in an `inbox` directory to a box.com account.
 
 #### Camel component used in this example
 
-* camel-code
-* camel-bom
+* camel-spring-dm
+* camel-box
 
 ### Build
 
@@ -18,19 +18,21 @@ First you will need to compile the example:
 
 ### Run
 
-To run the example on Apache Karaf 2.3.x
+To run the example on Apache Karaf 4.x or newer
 
-#### Step 1 
+#### Step 1
 
-Launch karaf
+Launch Karaf with:
 
-#### Step 2 
+  bin/karaf
 
-Add features required into Karak
+#### Step 2
 
-	features:addUrl mvn:org.apache.camel.karaf/apache-camel/${version}/xml/features
-	features:install camel-spring
-	features:install camel-box
+Add features required into Karaf
+
+	feature:repo-add camel ${version}
+	feature:install camel-spring-dm
+	feature:install camel-box
 
 #### Step 3
 
@@ -44,9 +46,9 @@ set to your box account credentials.
 
 #### Step 4
 
-Deploy the example into Karak
-	
-	osgi:install -s mvn:org.apache.camel/camel-example-box-osgi/${version}
+Deploy the example into Karaf
+
+	install -s mvn:org.apache.camel/camel-example-box-osgi/${version}
 
 #### Step 5
 
@@ -56,13 +58,13 @@ Copy files to the `inbox` directory in the Karaf base directory.
 
 Watch them get transferred to your box.com account.
 
-### Forum, Help, etc 
+### Forum, Help, etc
 
 If you hit an problems please let us know on the Camel Forums
-  [http://camel.apache.org/discussion-forums.html](http://camel.apache.org/discussion-forums.html)
+	<http://camel.apache.org/discussion-forums.html>
 
 Please help us make Apache Camel better - we appreciate any feedback you may
 have.  Enjoy!
 
-------------------------
+
 The Camel riders!

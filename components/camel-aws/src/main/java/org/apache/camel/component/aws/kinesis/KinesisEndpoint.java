@@ -32,23 +32,23 @@ import org.apache.camel.spi.UriPath;
 /**
  * The aws-kinesis component is for consuming records from Amazon Kinesis Streams.
  */
-@UriEndpoint(scheme = "aws-kinesis", title = "AWS Kinesis", syntax = "aws-kinesis:streamName", consumerOnly = true, consumerClass = KinesisConsumer.class, label = "cloud,messaging")
+@UriEndpoint(scheme = "aws-kinesis", title = "AWS Kinesis", syntax = "aws-kinesis:streamName", consumerClass = KinesisConsumer.class, label = "cloud,messaging")
 public class KinesisEndpoint extends ScheduledPollEndpoint {
 
-    @UriPath(label = "consumer", description = "Name of the stream")
+    @UriPath(description = "Name of the stream")
     @Metadata(required = "true")
     private String streamName;
-
-    // For now, always assume that we've been supplied a client in the Camel registry.
-    @UriParam(label = "consumer", description = "Amazon Kinesis client to use for all requests for this endpoint")
+    @UriParam(description = "Amazon Kinesis client to use for all requests for this endpoint")
     @Metadata(required = "true")
     private AmazonKinesis amazonKinesisClient;
-
     @UriParam(label = "consumer", description = "Maximum number of records that will be fetched in each poll", defaultValue = "1")
     private int maxResultsPerRequest = 1;
-
     @UriParam(label = "consumer", description = "Defines where in the Kinesis stream to start getting records")
     private ShardIteratorType iteratorType = ShardIteratorType.TRIM_HORIZON;
+    @UriParam(label = "consumer", description = "Defines which shardId in the Kinesis stream to get records from")
+    private String shardId = "";
+    @UriParam(label = "consumer", description = "The sequence number to start polling from")
+    private String sequenceNumber = "";
 
     public KinesisEndpoint(String uri, String streamName, KinesisComponent component) {
         super(uri, component);
@@ -56,14 +56,23 @@ public class KinesisEndpoint extends ScheduledPollEndpoint {
     }
 
     @Override
+    protected void doStart() throws Exception {
+        if ((iteratorType.equals(ShardIteratorType.AFTER_SEQUENCE_NUMBER) || iteratorType.equals(ShardIteratorType.AT_SEQUENCE_NUMBER)) && sequenceNumber.isEmpty()) {
+            throw new IllegalArgumentException("Sequence Number must be specified with iterator Types AFTER_SEQUENCE_NUMBER or AT_SEQUENCE_NUMBER");
+        }
+        super.doStart();
+    }
+
+    @Override
     public Producer createProducer() throws Exception {
-        throw new UnsupportedOperationException("Not supported yet.");
+        return new KinesisProducer(this);
     }
 
     @Override
     public Consumer createConsumer(Processor processor) throws Exception {
         final KinesisConsumer consumer = new KinesisConsumer(this, processor);
         consumer.setSchedulerProperties(getSchedulerProperties());
+        configureConsumer(consumer);
         return consumer;
     }
 
@@ -118,9 +127,20 @@ public class KinesisEndpoint extends ScheduledPollEndpoint {
         this.iteratorType = iteratorType;
     }
 
-    @Override
-    public String toString() {
-        return "KinesisEndpoint{amazonKinesisClient=[redacted], maxResultsPerRequest=" + maxResultsPerRequest + ", iteratorType=" + iteratorType + ", streamName=" + streamName + '}';
+    public String getShardId() {
+        return shardId;
+    }
+
+    public void setShardId(String shardId) {
+        this.shardId = shardId;
+    }
+
+    public String getSequenceNumber() {
+        return sequenceNumber;
+    }
+
+    public void setSequenceNumber(String sequenceNumber) {
+        this.sequenceNumber = sequenceNumber;
     }
 
 }

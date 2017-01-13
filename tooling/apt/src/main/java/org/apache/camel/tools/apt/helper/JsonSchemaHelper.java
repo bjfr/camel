@@ -20,6 +20,7 @@ import java.io.File;
 import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,7 +41,8 @@ public final class JsonSchemaHelper {
     }
 
     public static String toJson(String name, String kind, Boolean required, String type, String defaultValue, String description,
-                                Boolean deprecated, String group, String label, boolean enumType, Set<String> enums, boolean oneOfType, Set<String> oneOffTypes) {
+                                Boolean deprecated, Boolean secret, String group, String label, boolean enumType, Set<String> enums,
+                                boolean oneOfType, Set<String> oneOffTypes, boolean asPredicate, String optionalPrefix, String prefix, boolean multiValue) {
         String typeName = JsonSchemaHelper.getType(type, enumType);
 
         StringBuilder sb = new StringBuilder();
@@ -67,7 +69,8 @@ public final class JsonSchemaHelper {
 
         sb.append(", \"type\": ");
         if ("enum".equals(typeName)) {
-            sb.append(Strings.doubleQuote("string"));
+            String actualType = JsonSchemaHelper.getType(type, false);
+            sb.append(Strings.doubleQuote(actualType));
             sb.append(", \"javaType\": \"" + type + "\"");
             CollectionStringBuffer enumValues = new CollectionStringBuffer();
             for (Object value : enums) {
@@ -94,15 +97,47 @@ public final class JsonSchemaHelper {
             sb.append(", \"javaType\": \"" + type + "\"");
         }
 
+        if (!Strings.isNullOrEmpty(optionalPrefix)) {
+            sb.append(", \"optionalPrefix\": ");
+            String text = safeDefaultValue(optionalPrefix);
+            sb.append(Strings.doubleQuote(text));
+        }
+
+        if (!Strings.isNullOrEmpty(prefix)) {
+            sb.append(", \"prefix\": ");
+            String text = safeDefaultValue(prefix);
+            sb.append(Strings.doubleQuote(text));
+        }
+        if (multiValue) {
+            sb.append(", \"multiValue\": ");
+            sb.append(Strings.doubleQuote("true"));
+        }
+
         if (deprecated != null) {
             sb.append(", \"deprecated\": ");
             sb.append(Strings.doubleQuote(deprecated.toString()));
+        }
+
+        if (secret != null) {
+            sb.append(", \"secret\": ");
+            sb.append(Strings.doubleQuote(secret.toString()));
         }
 
         if (!Strings.isNullOrEmpty(defaultValue)) {
             sb.append(", \"defaultValue\": ");
             String text = safeDefaultValue(defaultValue);
             sb.append(Strings.doubleQuote(text));
+        }
+
+        // for expressions we want to know if it must be used as predicate or not
+        boolean predicate = "expression".equals(kind) || asPredicate;
+        if (predicate) {
+            sb.append(", \"asPredicate\": ");
+            if (asPredicate) {
+                sb.append(Strings.doubleQuote("true"));
+            } else {
+                sb.append(Strings.doubleQuote("false"));
+            }
         }
 
         if (!Strings.isNullOrEmpty(description)) {
@@ -130,6 +165,8 @@ public final class JsonSchemaHelper {
         } else if (type.equals(URI.class.getName()) || type.equals(URL.class.getName())) {
             return "string";
         } else if (type.equals(File.class.getName())) {
+            return "string";
+        } else if (type.equals(Date.class.getName())) {
             return "string";
         } else if (type.startsWith("java.lang.Class")) {
             return "string";

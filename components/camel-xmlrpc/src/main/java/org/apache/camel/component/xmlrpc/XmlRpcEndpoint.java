@@ -45,9 +45,9 @@ public class XmlRpcEndpoint extends DefaultEndpoint {
     private XmlRpcConfiguration configuration;
     @UriParam
     private String defaultMethodName;
-    @UriParam
+    @UriParam(label = "advanced")
     private XmlRpcClientConfigurer clientConfigurer;
-    @UriParam
+    @UriParam(label = "advanced")
     private XmlRpcClientConfigImpl clientConfig = new XmlRpcClientConfigImpl();
 
     public XmlRpcEndpoint() {
@@ -150,7 +150,8 @@ public class XmlRpcEndpoint extends DefaultEndpoint {
         }
 
         Map<String, Object> params = new HashMap<String, Object>();
-        IntrospectionSupport.getProperties(configuration, params, null);
+        // do not include null values
+        IntrospectionSupport.getProperties(configuration, params, null, false);
         setProperties(clientConfig, params);
     }
 }

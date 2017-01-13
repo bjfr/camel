@@ -94,7 +94,7 @@ import org.slf4j.LoggerFactory;
  *
  * @version 
  */
-@UriEndpoint(scheme = "mock", title = "Mock", syntax = "mock:name", producerOnly = true, label = "core,testing")
+@UriEndpoint(scheme = "mock", title = "Mock", syntax = "mock:name", producerOnly = true, label = "core,testing", lenientProperties = true)
 public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
     private static final Logger LOG = LoggerFactory.getLogger(MockEndpoint.class);
     // must be volatile so changes is visible between the thread which performs the assertions
@@ -133,6 +133,8 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
     private int retainFirst;
     @UriParam(label = "producer", defaultValue = "-1")
     private int retainLast;
+    @UriParam(label = "producer")
+    private int reportGroup;
     @UriParam(label = "producer,advanced", defaultValue = "true")
     private boolean copyOnExchange = true;
 
@@ -679,7 +681,11 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
         }
 
         if (actualValue instanceof Expression) {
-            actualValue = ((Expression)actualValue).evaluate(exchange, expectedValue != null ? expectedValue.getClass() : Object.class);
+            Class clazz = Object.class;
+            if (expectedValue != null) {
+                clazz = expectedValue.getClass();
+            }
+            actualValue = ((Expression)actualValue).evaluate(exchange, clazz);
         } else if (actualValue instanceof Predicate) {
             actualValue = ((Predicate)actualValue).matches(exchange);
         } else if (expectedValue != null) {
@@ -1217,6 +1223,17 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
      */
     public void setRetainLast(int retainLast) {
         this.retainLast = retainLast;
+    }
+
+    public int isReportGroup() {
+        return reportGroup;
+    }
+
+    /**
+     * A number that is used to turn on throughput logging based on groups of the size.
+     */
+    public void setReportGroup(int reportGroup) {
+        this.reportGroup = reportGroup;
     }
 
     public boolean isCopyOnExchange() {

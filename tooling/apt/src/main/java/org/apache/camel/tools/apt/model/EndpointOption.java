@@ -30,21 +30,31 @@ public final class EndpointOption {
     private String defaultValue;
     private String defaultValueNote;
     private String documentation;
+    private String optionalPrefix;
+    private String prefix;
+    private boolean multiValue;
     private boolean deprecated;
+    private boolean secret;
     private String group;
     private String label;
     private boolean enumType;
     private Set<String> enums;
 
     public EndpointOption(String name, String type, String required, String defaultValue, String defaultValueNote,
-                          String documentation, boolean deprecated,  String group, String label, boolean enumType, Set<String> enums) {
+                          String documentation, String optionalPrefix, String prefix, boolean multiValue,
+                          boolean deprecated, boolean secret, String group, String label,
+                          boolean enumType, Set<String> enums) {
         this.name = name;
         this.type = type;
         this.required = required;
         this.defaultValue = defaultValue;
         this.defaultValueNote = defaultValueNote;
         this.documentation = documentation;
+        this.optionalPrefix = optionalPrefix;
+        this.prefix = prefix;
+        this.multiValue = multiValue;
         this.deprecated = deprecated;
+        this.secret = secret;
         this.group = group;
         this.label = label;
         this.enumType = enumType;
@@ -71,8 +81,24 @@ public final class EndpointOption {
         return documentation;
     }
 
+    public String getOptionalPrefix() {
+        return optionalPrefix;
+    }
+
+    public String getPrefix() {
+        return prefix;
+    }
+
+    public boolean isMultiValue() {
+        return multiValue;
+    }
+
     public boolean isDeprecated() {
         return deprecated;
+    }
+
+    public boolean isSecret() {
+        return secret;
     }
 
     public String getEnumValuesAsHtml() {

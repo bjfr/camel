@@ -29,9 +29,11 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 
 import org.apache.camel.CamelContext;
+import org.apache.camel.Suspendable;
 import org.apache.camel.support.ServiceSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,7 +41,7 @@ import org.slf4j.LoggerFactory;
 /**
  * A {@link NettyServerBootstrapFactory} which is used by a single consumer (not shared).
  */
-public class ClientModeTCPNettyServerBootstrapFactory extends ServiceSupport implements NettyServerBootstrapFactory {
+public class ClientModeTCPNettyServerBootstrapFactory extends ServiceSupport implements NettyServerBootstrapFactory, Suspendable {
 
     protected static final Logger LOG = LoggerFactory.getLogger(ClientModeTCPNettyServerBootstrapFactory.class);
     
@@ -119,6 +121,7 @@ public class ClientModeTCPNettyServerBootstrapFactory extends ServiceSupport imp
         if (wg == null) {
             // create new pool which we should shutdown when stopping as its not shared
             workerGroup = new NettyWorkerPoolBuilder()
+                    .withNativeTransport(configuration.isNativeTransport())
                     .withWorkerCount(configuration.getWorkerCount())
                     .withName("NettyServerTCPWorker")
                     .build();
@@ -126,7 +129,11 @@ public class ClientModeTCPNettyServerBootstrapFactory extends ServiceSupport imp
         }
         
         clientBootstrap = new Bootstrap();
-        clientBootstrap.channel(NioSocketChannel.class);
+        if (configuration.isNativeTransport()) {
+            clientBootstrap.channel(EpollSocketChannel.class);
+        } else {
+            clientBootstrap.channel(NioSocketChannel.class);
+        }
         clientBootstrap.group(wg);
         clientBootstrap.option(ChannelOption.SO_KEEPALIVE, configuration.isKeepAlive());
         clientBootstrap.option(ChannelOption.TCP_NODELAY, configuration.isTcpNoDelay());

@@ -45,9 +45,9 @@ public class KubernetesNamespacesConsumerTest extends KubernetesTestSupport {
             return;
         }
 
-        mockResultEndpoint.expectedMessageCount(3);
+        mockResultEndpoint.expectedMessageCount(5);
         mockResultEndpoint.expectedHeaderValuesReceivedInAnyOrder(KubernetesConstants.KUBERNETES_EVENT_ACTION, "ADDED",
-                "MODIFIED", "DELETED");
+                "MODIFIED", "MODIFIED", "MODIFIED", "DELETED");
         
         Exchange ex = template.request("direct:createNamespace",
                 new Processor() {
@@ -109,6 +109,8 @@ public class KubernetesNamespacesConsumerTest extends KubernetesTestSupport {
         boolean nsDeleted = ex.getOut().getBody(Boolean.class);
 
         assertTrue(nsDeleted);
+        
+        Thread.sleep(3000);
 
         mockResultEndpoint.assertIsSatisfied();
     }

@@ -34,6 +34,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -443,6 +444,20 @@ public final class IntrospectionSupport {
                 rc.put(name, value);
                 it.remove();
             }
+        }
+
+        return rc;
+    }
+
+    public static Map<String, String> extractStringProperties(Map<String, Object> properties) {
+        ObjectHelper.notNull(properties, "properties");
+
+        Map<String, String> rc = new LinkedHashMap<String, String>(properties.size());
+
+        for (Entry<String, Object> entry : properties.entrySet()) {
+            String name = entry.getKey();
+            String value = entry.getValue().toString();
+            rc.put(name, value);
         }
 
         return rc;

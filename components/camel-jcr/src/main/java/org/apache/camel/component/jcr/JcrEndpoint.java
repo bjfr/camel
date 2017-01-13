@@ -36,7 +36,8 @@ import org.apache.camel.util.ObjectHelper;
 /**
  * The jcr component allows you to add/read nodes to/from a JCR compliant content repository.
  */
-@UriEndpoint(scheme = "jcr", title = "JCR", syntax = "jcr:host/base", consumerClass = JcrConsumer.class, label = "cms,database")
+@UriEndpoint(scheme = "jcr", title = "JCR", syntax = "jcr:host/base", alternativeSyntax = "jcr:username:password@host/base",
+        consumerClass = JcrConsumer.class, label = "cms,database")
 public class JcrEndpoint extends DefaultEndpoint {
 
     private Credentials credentials;
@@ -44,7 +45,7 @@ public class JcrEndpoint extends DefaultEndpoint {
 
     @UriPath @Metadata(required = "true")
     private String host;
-    @UriPath @Metadata(required = "true")
+    @UriPath
     private String base;
     @UriParam
     private String username;
